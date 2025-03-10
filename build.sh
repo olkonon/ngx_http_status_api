@@ -31,7 +31,11 @@ tar -xzf nginx-${NGINX_VERSION}.tar.gz
 mv nginx-${NGINX_VERSION}/* $DIR/buildnginx/
 cd $DIR/buildnginx
 
-./configure --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security' --with-pcre --with-stream --with-http_ssl_module \
+./configure --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security' \
+--with-pcre \
+--with-stream \
+--with-http_ssl_module \
+--with-http_stub_status_module \
 --add-module=./modules/ngx_healthcheck/ \
 --add-module=./modules/ngx_module_vts/ \
 --add-module=./modules/ngx_http_status_api/ \
