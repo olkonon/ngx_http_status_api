@@ -4,5 +4,6 @@ Build status
 
 Name
 ====
-
 ngx_http_status_api  - Nginx simple JSON API.
+
+This module has integration with https://github.com/olkonon/ngx_healthcheck and  https://github.com/olkonon/ngx_module_vts
