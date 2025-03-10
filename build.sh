@@ -9,14 +9,15 @@ echo "Nginx version $NGINX_VERSION"
 echo "Directory: $DIR"
 mkdir -p $DIR/buildnginx/modules/ngx_module_vts/
 wget "https://github.com/olkonon/ngx_module_vts/archive/refs/tags/${VTS_MODULE_VERSION}.tar.gz"
-tar -xzf ${VTS_MODULE_VERSION}.tar.gz -C $DIR/buildnginx/modules/ngx_module_vts/
+tar -xzf ${VTS_MODULE_VERSION}.tar.gz
+mv ngx_module_vts-${VTS_MODULE_VERSION}/* $DIR/buildnginx/modules/ngx_module_vts/
 rm ${VTS_MODULE_VERSION}.tar.gz
 
-ls -la $DIR/buildnginx/modules/ngx_module_vts/
 
 mkdir -p $DIR/buildnginx/modules/ngx_healthcheck/
 wget "https://github.com/olkonon/ngx_healthcheck/archive/refs/tags/${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz"
-tar -xzf ${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz -C $DIR/buildnginx/modules/ngx_healthcheck/
+tar -xzf ${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz
+mv ngx_healthcheck-${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}/* $DIR/buildnginx/modules/ngx_healthcheck/
 rm ${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz
 
 
