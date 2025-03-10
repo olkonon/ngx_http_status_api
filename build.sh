@@ -10,6 +10,7 @@ echo "Directory: $DIR"
 mkdir -p $DIR/buildnginx/modules/ngx_module_vts/
 wget "https://github.com/olkonon/ngx_module_vts/archive/refs/tags/${VTS_MODULE_VERSION}.tar.gz"
 tar -xzf ${VTS_MODULE_VERSION}.tar.gz
+ls -la 
 mv ngx_module_vts-${VTS_MODULE_VERSION}/* $DIR/buildnginx/modules/ngx_module_vts/
 rm ${VTS_MODULE_VERSION}.tar.gz
 
