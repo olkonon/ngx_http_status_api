@@ -1,6 +1,6 @@
 Build status
 ======
-[![Build Status](https://github.com/olkonon/ngx_http_status_api/actions/workflows/build.yml/badge.svg)](https://github.com/olkonon/ngx_http_status_api/actions/workflows/build.yml)
+[![Build Status](https://github.com/olkonon/ngx_http_status_api/actions/workflows/build.yaml/badge.svg)](https://github.com/olkonon/ngx_http_status_api/actions/workflows/build.yml)
 
 Name
 ====
