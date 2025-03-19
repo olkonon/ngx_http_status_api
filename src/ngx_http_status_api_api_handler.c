@@ -170,7 +170,7 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
                     "\"upstreams\","
                     #endif
                     #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
-                    "\"heathchecks\","
+                    "\"healthchecks\","
                     #endif
                     "\"server_zones\""
                     "]");

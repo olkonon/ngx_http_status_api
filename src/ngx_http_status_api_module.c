@@ -154,8 +154,10 @@ static ngx_int_t ngx_http_status_api_add_shm_to_ctx(ngx_conf_t *cf,ngx_shm_zone_
 static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
     ngx_str_t *shm_name_prefix;
     ngx_str_t *shm_name;
+ #if (NGX_DEBUG)
     ngx_conf_log_error(NGX_LOG_ALERT, cf, 0,
            "[status-api][get_or_create_shm_zone] Init zone  \"%V\"", name);
+ #endif
     //Init prefix for shm status_zone
     shm_name_prefix = ngx_palloc(cf->pool,sizeof(ngx_str_t));
     ngx_str_set(shm_name_prefix,"http-status-api-");
