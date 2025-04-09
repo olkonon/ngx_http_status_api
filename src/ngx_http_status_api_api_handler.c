@@ -113,7 +113,8 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
                     "\"connections\","
                     #endif
                     "\"nginx\","
-                    "\"http\""
+                    "\"http\","
+                    "\"stream\""
                     "]")+1;
         b = ngx_create_temp_buf(r->pool, size);
         if (b == NULL) {
@@ -126,7 +127,8 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
                     "\"connections\","
                     #endif
                     "\"nginx\","
-                    "\"http\""
+                    "\"http\","
+                    "\"stream\""
                     "]");
 
         out.buf = b;
@@ -191,6 +193,39 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     }
 
 
+    if ((ngx_strncmp(path->data, "/v1/stream",path->len) == 0) || (ngx_strncmp(path->data, "/v1/stream/",path->len) == 0)) {
+        size = sizeof("["
+                    #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
+                    "\"heathchecks\""
+                    #endif
+                    "]")+1;
+        b = ngx_create_temp_buf(r->pool, size);
+        if (b == NULL) {
+            return NGX_HTTP_INTERNAL_SERVER_ERROR;
+        }
+
+        b->last = ngx_sprintf(b->last, "["
+                    #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
+                    "\"healthchecks\""
+                    #endif
+                    "]");
+
+        out.buf = b;
+        out.next = NULL;
+        r->headers_out.status = NGX_HTTP_OK;
+        r->headers_out.content_length_n = b->last - b->pos;
+
+        b->last_buf = (r == r->main) ? 1 : 0;
+        b->last_in_chain = 1;
+
+        rc = ngx_http_send_header(r);
+        if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+            return rc;
+        }
+        return ngx_http_output_filter(r, &out);
+    }
+
+
     if (ngx_strncmp(path->data, "/v1/ssl",path->len) == 0) {
         return ngx_http_status_api_api_handler_ssl(r);
     }
@@ -219,7 +254,7 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     if (ngx_strncmp(path->data, "/v1/http/healthchecks",path->len) == 0) {
         return ngx_http_dynamic_healthcheck_upstream_status_handler(r);
     }
-        if (ngx_strncmp(path->data, "/v1/stream/healthchecks",path->len) == 0) {
+    if (ngx_strncmp(path->data, "/v1/stream/healthchecks",path->len) == 0) {
         return ngx_http_dynamic_healthcheck_stream_status_handler(r);
     }
     #endif
