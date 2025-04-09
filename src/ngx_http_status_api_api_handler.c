@@ -193,7 +193,7 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     }
 
 
-    if ((ngx_strncmp(path->data, "/v1/stream",path->len) == 0) || (ngx_strncmp(path->data, "/v1/http/",path->len) == 0)) {
+    if ((ngx_strncmp(path->data, "/v1/stream",path->len) == 0) || (ngx_strncmp(path->data, "/v1/stream/",path->len) == 0)) {
         size = sizeof("["
                     #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
                     "\"heathchecks\""
