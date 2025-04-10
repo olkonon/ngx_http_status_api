@@ -9,17 +9,14 @@
 #ifdef NGX_HTTP_VTS_STATUS
 #include "ngx_http_vhost_traffic_status_module.h"
 #include "ngx_http_vhost_traffic_status_shm.h"
-#include "ngx_http_vhost_traffic_status_display_prometheus.h"
-#include "ngx_http_vhost_traffic_status_display_json.h"
-#include "ngx_http_vhost_traffic_status_display.h"
-#include "ngx_http_vhost_traffic_status_control.h"
 
 static u_char *ngx_http_status_api_traffic_status_display_set_upstream_node(ngx_http_request_t *r,u_char *buf, ngx_http_upstream_server_t *us, ngx_http_vhost_traffic_status_node_t *vtsn);
 static u_char *ngx_http_api_status_traffic_status_display_set_upstream_group(ngx_http_request_t *r,u_char *buf);
 static ngx_int_t ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r);
 static u_char *ngx_http_status_api_traffic_status_display_set(ngx_http_request_t *r,u_char *buf);
+static ngx_int_t ngx_http_status_api_traffic_status_display_get_size(ngx_http_request_t *r);
+static u_char *ngx_http_status_api_traffic_status_display_set_upstream_alone(ngx_http_request_t *r, u_char *buf, ngx_rbtree_node_t *node);
 #endif
-
 
 ngx_int_t ngx_http_status_api_handler_upstreams_handler(ngx_http_request_t *r) {
 #ifdef NGX_HTTP_VTS_STATUS
@@ -67,7 +64,7 @@ ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r
     r->headers_out.content_type = type;
 
 
-    size = ngx_http_vhost_traffic_status_display_get_size(r, NGX_HTTP_VHOST_TRAFFIC_STATUS_FORMAT_JSON);
+    size = ngx_http_status_api_traffic_status_display_get_size(r);
     if (size == NGX_ERROR) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "[http-status-api]  display_handler_default::display_get_size() failed");
@@ -304,7 +301,7 @@ not_supported:
 
     s = buf;
 
-    buf = ngx_http_vhost_traffic_status_display_set_upstream_alone(r, buf, ctx->rbtree->root);
+    buf = ngx_http_status_api_traffic_status_display_set_upstream_alone(r, buf, ctx->rbtree->root);
 
     if (s == buf) {
         buf = o;
@@ -381,4 +378,87 @@ static u_char *ngx_http_status_api_traffic_status_display_set_upstream_node(ngx_
 
     return buf;
 }
+
+
+static ngx_int_t
+ngx_http_status_api_traffic_status_display_get_size(ngx_http_request_t *r)
+{
+    ngx_uint_t                                 size;
+    ngx_slab_pool_t                           *shpool;
+    ngx_http_vhost_traffic_status_loc_conf_t  *vtscf;
+    ngx_http_vhost_traffic_status_shm_info_t  *shm_info;
+
+    vtscf = ngx_http_get_module_loc_conf(r, ngx_http_vhost_traffic_status_module);
+    shpool = (ngx_slab_pool_t *) vtscf->shm_zone->shm.addr;
+
+    shm_info = ngx_pcalloc(r->pool, sizeof(ngx_http_vhost_traffic_status_shm_info_t));
+    if (shm_info == NULL) {
+        return NGX_ERROR;
+    }
+
+    /* Caveat: Do not use duplicate ngx_shmtx_lock() before this function. */
+    ngx_shmtx_lock(&shpool->mutex);
+
+    ngx_http_vhost_traffic_status_shm_info(r, shm_info);
+
+    ngx_shmtx_unlock(&shpool->mutex);
+
+    /* allocate memory for the upstream groups even if upstream node not exists */
+
+    size = 0;
+
+    if (size <= 0) {
+        size = shm_info->max_size;
+    }
+
+    ngx_log_debug3(NGX_LOG_DEBUG_HTTP, r->connection->log, 0,
+                   "vts::display_get_size(): size[%ui] used_size[%ui], used_node[%ui]",
+                   size, shm_info->used_size, shm_info->used_node);
+
+    return size;
+}
+
+
+
+static u_char *
+ngx_http_status_api_traffic_status_display_set_upstream_alone(ngx_http_request_t *r,
+    u_char *buf, ngx_rbtree_node_t *node)
+{
+    unsigned                               type;
+    ngx_str_t                              key;
+    ngx_http_upstream_server_t             us;
+    ngx_http_vhost_traffic_status_ctx_t   *ctx;
+    ngx_http_vhost_traffic_status_node_t  *vtsn;
+
+    ctx = ngx_http_get_module_main_conf(r, ngx_http_vhost_traffic_status_module);
+
+    type = NGX_HTTP_VHOST_TRAFFIC_STATUS_UPSTREAM_UA;
+
+    if (node != ctx->rbtree->sentinel) {
+        vtsn = (ngx_http_vhost_traffic_status_node_t *) &node->color;
+
+        if (vtsn->stat_upstream.type == type) {
+            key.len = vtsn->len;
+            key.data = vtsn->data;
+
+            (void) ngx_http_vhost_traffic_status_node_position_key(&key, 1);
+
+            us.name = key;
+            us.weight = 0;
+            us.max_fails = 0;
+            us.fail_timeout = 0;
+            us.down = 0;
+            us.backup = 0;
+
+            buf = ngx_http_status_api_traffic_status_display_set_upstream_node(r, buf, &us, vtsn);
+
+        }
+
+        buf = ngx_http_status_api_traffic_status_display_set_upstream_alone(r, buf, node->left);
+        buf = ngx_http_status_api_traffic_status_display_set_upstream_alone(r, buf, node->right);
+    }
+
+    return buf;
+}
+
 #endif

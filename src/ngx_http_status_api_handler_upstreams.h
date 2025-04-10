@@ -4,7 +4,15 @@
 
 #ifndef NGX_HTTP_STATUS_API_HANDLER_UPSTREAMS_H
 #define NGX_HTTP_STATUS_API_HANDLER_UPSTREAMS_H
+
 ngx_int_t ngx_http_status_api_handler_upstreams_handler(ngx_http_request_t *r);
+
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_S           "{"
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_E           "}"
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_ARRAY_S     "\"%V\":["
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_ARRAY_E     "]"
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_NEXT        ","
+
 
 #define NGX_HTTP_STATUS_API_JSON_FMT_UPSTREAM "{\"server\":\"%V\","            \
     "\"requestCounter\":%uA,"                                                  \
@@ -27,5 +35,6 @@ ngx_int_t ngx_http_status_api_handler_upstreams_handler(ngx_http_request_t *r);
     "\"backup\":%s,"                                                           \
     "\"down\":%s"                                                             \
     "},"
+
 
 #endif //NGX_HTTP_STATUS_API_HANDLER_UPSTREAMS_H
