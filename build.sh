@@ -27,8 +27,8 @@ rm v${STS_MODULE_VERSION}.tar.gz
 mkdir -p $DIR/buildnginx/modules/ngx_healthcheck/
 wget "https://github.com/olkonon/ngx_healthcheck/archive/refs/tags/v${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz"
 tar -xzf v${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz
-mv ngx_healthcheck-${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}/* $DIR/buildnginx/modules/ngx_healthcheck/
-rm v${DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION}.tar.gz
+mv ngx_healthcheck-${DYNAMIC_HEALTHCHECK_STS_MODULE_VERSION}/* $DIR/buildnginx/modules/ngx_healthcheck/
+rm v${DYNAMIC_HEALTHCHECK_STS_MODULE_VERSION}.tar.gz
 
 
 mkdir -p $DIR/buildnginx/modules/ngx_http_status_api/
