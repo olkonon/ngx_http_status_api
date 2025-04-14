@@ -8,6 +8,7 @@ DYNAMIC_HEALTHCHECK_VTS_MODULE_VERSION="0.0.1"
 
 echo "Nginx version $NGINX_VERSION"
 echo "Directory: $DIR"
+
 mkdir -p $DIR/buildnginx/modules/ngx_module_vts/
 wget "https://github.com/olkonon/ngx_module_vts/archive/refs/tags/v${VTS_MODULE_VERSION}.tar.gz"
 tar -xzf v${VTS_MODULE_VERSION}.tar.gz
