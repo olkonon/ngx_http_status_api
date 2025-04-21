@@ -6,7 +6,7 @@
 #include <ngx_http.h>
 #include "ngx_http_status_api_module.h"
 #include "ngx_http_status_api_handler_upstreams.h"
-
+#include "ngx_http_status_api_handler_streams.h"
 
 static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_str_t *path);
 static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r);
@@ -195,6 +195,9 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
 
     if ((ngx_strncmp(path->data, "/v1/stream",path->len) == 0) || (ngx_strncmp(path->data, "/v1/stream/",path->len) == 0)) {
         size = sizeof("["
+                    #ifdef NGX_STREAM_STS_STATUS
+                    "\"upstreams\","
+                    #endif
                     #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
                     "\"heathchecks\""
                     #endif
@@ -205,6 +208,9 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
         }
 
         b->last = ngx_sprintf(b->last, "["
+                    #ifdef NGX_STREAM_STS_STATUS
+                    "\"upstreams\","
+                    #endif
                     #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
                     "\"healthchecks\""
                     #endif
@@ -246,10 +252,14 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
       return ngx_http_status_api_api_handler_server_zones(r);
     }
 
+    if (ngx_strncmp(path->data, "/v1/stream/upstreams",path->len) == 0) {
+        return ngx_http_status_api_handler_streams_handler(r);
+    }
 
     if (ngx_strncmp(path->data, "/v1/http/upstreams",path->len) == 0) {
         return ngx_http_status_api_handler_upstreams_handler(r);
     }
+
     #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
     if (ngx_strncmp(path->data, "/v1/http/healthchecks",path->len) == 0) {
         return ngx_http_dynamic_healthcheck_upstream_status_handler(r);

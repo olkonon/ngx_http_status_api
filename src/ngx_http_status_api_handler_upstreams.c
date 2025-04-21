@@ -22,7 +22,7 @@ ngx_int_t ngx_http_status_api_handler_upstreams_handler(ngx_http_request_t *r) {
 #ifdef NGX_HTTP_VTS_STATUS
     return ngx_http_status_api_traffic_status_display_handler_default(r);
 #else
-    return NNGX_HTTP_NOT_FOUND;
+    return NGX_HTTP_NOT_FOUND;
 #endif
 }
 
