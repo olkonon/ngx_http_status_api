@@ -7,12 +7,14 @@ HTTP_STATUS_API_SRCS="                                         \
     $ngx_addon_dir/src/ngx_http_status_api_module.c            \
     $ngx_addon_dir/src/ngx_http_status_api_api_handler.c       \
     $ngx_addon_dir/src/ngx_http_status_api_handler_upstreams.c \
+    $ngx_addon_dir/src/ngx_http_status_api_handler_streams.c
 "
 
 HTTP_STATUS_API_DEPS="                                         \
     $ngx_addon_dir/src/ngx_http_status_api_module.h            \
     $ngx_addon_dir/src/ngx_http_status_api_api_handler.h       \
     $ngx_addon_dir/src/ngx_http_status_api_handler_upstreams.h \
+    $ngx_addon_dir/src/ngx_http_status_api_handler_streams.h \
 "
 
 if test -n "$ngx_module_link"; then
