@@ -14,7 +14,7 @@
 #define SHM_DEFAULT_NAME "default"
 #define STAT_POLL_INTERVAL 1000
 
-static ngx_array_t *get_http_status_api_ctx();
+ngx_array_t *get_http_status_api_ctx();
 int *get_config_load_time();
 
 typedef struct {
