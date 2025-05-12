@@ -10,7 +10,7 @@
 #include "ngx_http_status_api_module.h"
 #include "ngx_http_status_api_api_handler.h"
 
-static ngx_array_t *http_status_api_ctx = NULL;
+ngx_array_t *http_status_api_ctx = NULL;
 ngx_array_t *get_http_status_api_ctx() {
   return http_status_api_ctx;
 }
