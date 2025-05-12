@@ -82,7 +82,7 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     }
     // handle /api
     if ((ngx_strncmp(path->data, "/",path->len) == 0) || (ngx_strncmp(path->data, "",path->len) == 0)) {
-        size = sizeof("[\"v1\"]");
+        size = sizeof("[\"v1\"]")+1;
         b = ngx_create_temp_buf(r->pool, size);
 
         if (b == NULL) {
@@ -319,7 +319,7 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
 
 
 
-    b = ngx_create_temp_buf(r->pool, 1024);
+    b = ngx_create_temp_buf(r->pool, 65535);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -354,7 +354,7 @@ static ngx_int_t ngx_http_status_api_api_handler_nginx(ngx_http_request_t *r) {
 
     struct timeval   tv;
 
-    b = ngx_create_temp_buf(r->pool, 1024);
+    b = ngx_create_temp_buf(r->pool, 65535);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -409,7 +409,7 @@ static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t
     num = http_status_api_ctx->nelts;
     records = http_status_api_ctx->elts;
 
-    b = ngx_create_temp_buf(r->pool, 65535);
+    b = ngx_create_temp_buf(r->pool, 655350);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -506,7 +506,7 @@ static ngx_int_t ngx_http_status_api_api_handler_connections (ngx_http_request_t
     ngx_int_t                           rc;
     ngx_atomic_int_t                    conn_accepted,conn_dropped,conn_handled,conn_active,conn_idle,conn_reading,conn_writing;
 
-    b = ngx_create_temp_buf(r->pool, 1024);
+    b = ngx_create_temp_buf(r->pool, 65535);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -552,7 +552,7 @@ static ngx_int_t ngx_http_status_api_api_handler_requests (ngx_http_request_t *r
     ngx_int_t                           rc;
     ngx_atomic_int_t                    requests,conn_reading,conn_writing;
 
-    b = ngx_create_temp_buf(r->pool, 512);
+    b = ngx_create_temp_buf(r->pool, 65535);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
