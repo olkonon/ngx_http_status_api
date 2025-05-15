@@ -14,6 +14,20 @@
 #define SHM_DEFAULT_NAME "default"
 #define STAT_POLL_INTERVAL 1000
 
+#ifdef NGX_DEBUG
+    #define dbg_http_status_api_conf_log_info(cf,...)                 ngx_conf_log_error (NGX_LOG_INFO, cf, 0, __VA_ARGS__)
+    #define dbg_http_status_api_log_info(log,...)                     ngx_log_error (NGX_LOG_INFO, log, 0, __VA_ARGS__)
+
+    #define dbg_http_status_api_conf_log_error(cf,...)                ngx_conf_log_error (NGX_LOG_ERR, cf, 0, __VA_ARGS__)
+    #define dbg_http_status_api_log_error(log,...)                    ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
+#else
+    #define dbg_http_status_api_conf_log_info(cf,...)
+    #define dbg_http_status_api_log_info(log,...)
+
+    #define dbg_http_status_api_conf_log_error(cf,...)
+    #define dbg_http_status_api_log_error(log,...)
+#endif
+
 ngx_array_t *get_http_status_api_ctx();
 int *get_config_load_time();
 
