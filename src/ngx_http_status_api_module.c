@@ -147,63 +147,41 @@ ngx_http_status_api(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
 /* This will be called by timer to append openssl stat values of current worker
  * process to counters in shm */
 static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
-    ngx_uint_t                       s, tmp;
-    ngx_http_core_main_conf_t       *cmcf;
-    ngx_http_core_main_conf_t  *cmcflocal;
+    ngx_cycle_t *cycle = ev->data;
+    ngx_http_core_main_conf_t       *cmcf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_core_module);
+    ngx_http_core_main_conf_t  *cmcflocal = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_status_api_module);
+    //Get conigs
+    ngx_uint_t                      i,tmp;
     ngx_http_ssl_srv_conf_t         *sscf;
-    ngx_http_core_srv_conf_t       **cscfp;
+    ngx_http_core_srv_conf_t       **cscfp = cmcf->servers.elts; // get all servers in current worker
+    ngx_uint_t						num_servers = cmcf->servers.nelts; // get all servers count in current worker
     ngx_http_status_api_srv_conf_t  *sslscf;
-    ngx_http_status_api_srv_conf_t  *hsamcf;
+    ngx_http_status_api_srv_conf_t  *hsamcf = (ngx_http_status_api_srv_conf_t *) cmcflocal;// get conf with default status zone
     ngx_http_status_api_counters_t  *counters;
-    ngx_slab_pool_t                           *shpool;
-	ngx_cycle_t *cycle = ev->data;
+    ngx_slab_pool_t                 *shpool;
 
-    cmcf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_core_module);
-    cmcflocal = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_status_api_module);
+    dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat] Start stat timer.");
+ 	dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat] Get %ui servers from configs",num_servers);
 
-    #ifdef NGX_DEBUG
-      ngx_log_error(NGX_LOG_INFO, ev->log, 0,
-                  "[http-status-api][ngx_http_status_api_poll_stat] Start stat timer.");
-      ngx_log_error(NGX_LOG_INFO, ev->log, 0,
-                  "[http-status-api][ngx_http_status_api_poll_stat] Nginx state flags ngx_exiting=%i ngx_quit=%i"
-                  ,ngx_exiting,ngx_quit);
-    #endif
-    if (ngx_exiting) {
-      #ifdef NGX_DEBUG
-      	ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[http-status-api][ngx_http_status_api_poll_stat] Detect ngx_exiting timer handle stoped.");
-      #endif
-      return;
-    }
-    if (ngx_quit) {
-      #ifdef NGX_DEBUG
-      	ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[http-status-api][ngx_http_status_api_poll_stat] Detect ngx_quit timer handle stoped.");
-      #endif
-      return;
-    }
-
-    // get all servers in current worker
-    cscfp = cmcf->servers.elts;
-    //ngx_http_conf_get_module_main_conf(cf, ngx_http_my_module);
-	hsamcf = (ngx_http_status_api_srv_conf_t *) cmcflocal;
-
-    // for server_index in servers
-    #ifdef NGX_DEBUG
-    	ngx_log_error(NGX_LOG_ERR, ev->log, 0, "[http-status-api][ngx_http_status_api_poll_stat] Start servers iterate");
-    #endif
-    for (s = 0; s < cmcf->servers.nelts; s++) {
-        dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Process server",s);
-
+    for (i = 0; i < num_servers; i++) {
+        dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Process server",i);
 		//ssl module config
-        sscf = cscfp[s]->ctx->srv_conf[ngx_http_ssl_module.ctx_index];
+        sscf = cscfp[i]->ctx->srv_conf[ngx_http_ssl_module.ctx_index];
         // this module config
-        sslscf = cscfp[s]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
-        // if ssl_status_zone is defined && ssl is enabled
-        if (sslscf->shm_zone != NULL && sscf->ssl.ctx != NULL && sslscf->shm_zone->shm.addr != NULL) {
-      		dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to server specific status_zone",s);
+        sslscf = cscfp[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
+        //if ssl not enabled for server
+        if ( sscf->ssl.ctx == NULL) {
+          dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Server hasn't ssl context http server only",i);
+          continue;
+        }
+	    //SSL only server
+        // if status_zone deined & enabled
+        if (sslscf->shm_zone != NULL && sslscf->shm_zone->shm.addr != NULL) {
+      		dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to server specific status_zone",i);
 
             shpool = (ngx_slab_pool_t *) sslscf->shm_zone->shm.addr;
             if (shpool == NULL) {
-      			dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Var is NULL shpool.",s);
+      			dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Var is NULL shpool.",i);
                 continue;
             }
             #ifdef NGX_DEBUG
@@ -233,18 +211,18 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
             #ifdef NGX_DEBUG
       			ngx_log_error(NGX_LOG_INFO, ev->log, 0, "[http-status-api][ngx_http_status_api_poll_stat] Mutex unlock SUCCESS.");
       		#endif
-        } else if (hsamcf->shm_zone != NULL && sscf->ssl.ctx != NULL && hsamcf->shm_zone->shm.addr != NULL) {
-      		dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to default status_zone",s);
+        } else if (hsamcf->shm_zone != NULL && hsamcf->shm_zone->shm.addr != NULL) {
+      		dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to default status_zone",i);
 
             shpool = (ngx_slab_pool_t *) hsamcf->shm_zone->shm.addr;
             if (shpool == NULL) {
-      			dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Var is NULL shpool.",s);
+      			dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Var is NULL shpool.",i);
                 continue;
             }
 
-            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Try lock mutex for shpool.",s);
+            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Try lock mutex for shpool.",i);
             ngx_shmtx_lock(&shpool->mutex);//Mutex
-            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Mutex lock SUCCESS.",s);
+            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Mutex lock SUCCESS.",i);
 
             counters = hsamcf->shm_zone->data;
 
@@ -260,11 +238,11 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
             ngx_http_status_api_add_ssl_counter_delta(
                     ssl_timeouts, SSL_CTX_sess_timeouts);
 
-            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Try unlock mutex for shpool",s);
+            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Try unlock mutex for shpool",i);
             ngx_shmtx_unlock(&shpool->mutex);//Mutex
-            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Mutex unlock SUCCESS.",s);
+            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Mutex unlock SUCCESS.",i);
         } else {
-            dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Strange variant, some bugs may be:-)",s);
+            dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Strange variant, some bugs may be:-)",i);
         }
     }
 
