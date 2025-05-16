@@ -10,11 +10,6 @@
 #include "ngx_http_status_api_module.h"
 #include "ngx_http_status_api_api_handler.h"
 
-//static ngx_array_t *http_status_api_ctx = NULL;
-//ngx_array_t *get_http_status_api_ctx() {
-//  return http_status_api_ctx;
-//}
-
 static int *load_config_sec = NULL;
 
 int *get_config_load_time() {
@@ -107,57 +102,7 @@ ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
 
     return NGX_OK;
 }
-/*
-static ngx_int_t ngx_http_status_api_add_shm_to_ctx(ngx_conf_t *cf,ngx_shm_zone_t *shm_zone,ngx_str_t *name) {
-    ngx_http_status_api_ctx_record_t *record,*records;
-    ngx_uint_t i;
-    #if (NGX_DEBUG)
-    	ngx_log_debug1(NGX_LOG_INFO, cf->log, 0, "[http-status-api][ngx_http_status_api_add_shm_to_ctx][%V] Start add SHM to ctx", name);
- 	#endif
 
-    if (http_status_api_ctx == NULL) {
-        http_status_api_ctx = ngx_array_create(cf->pool, 1, sizeof(ngx_http_status_api_ctx_record_t));
-        if (http_status_api_ctx == NULL) {
-            ngx_log_error(NGX_LOG_ERR, cf->log, 0,"[http-status-api][ngx_http_status_api_add_shm_to_ctx][%V] Ctx creata error, http_status_api_ctx is null",name);
-            return NGX_ERROR;
-        } else {
-            records = http_status_api_ctx->elts;
-            records[0].name.len = name->len;
-            records[0].name.data = name->data;
-            records[0].shm_zone = shm_zone;
-            return NGX_OK;
-        }
-    } else {
-      //Remove duplicate zones
-      records = http_status_api_ctx->elts;
-      for(i=0;i<http_status_api_ctx->nelts;i++) {
-        if (ngx_strcmp(&records[i].name, name) == 0) {
-            if (records[i].shm_zone == shm_zone) {
-                return NGX_OK;
-            } else {
-               ngx_log_error(NGX_LOG_ERR, cf->log, 0, "[http-status-api][ngx_http_status_api_add_shm_to_ctx][%V] Address shm in ctx and new mismatch.", name);
-               return NGX_ERROR;
-            }
-        }
-      }
-    }
-
-    record = ngx_array_push(http_status_api_ctx);
-    ngx_memzero(record, sizeof(ngx_http_status_api_ctx_record_t));
-
-    if (record == NULL) {
-        ngx_log_error(NGX_LOG_EMERG, cf->log, 0,"[http-status-api][ngx_http_status_api_add_shm_to_ctx][%V] Create record error, record is NULL",name);
-        return NGX_ERROR;
-    }
-
-    record->name.len = name->len;
-    record->name.data = name->data;
-    record->shm_zone = shm_zone;
-
-
-    return NGX_OK;
-}
-*/
 
 static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
 	#ifdef NGX_DEBUG
@@ -172,12 +117,6 @@ static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
 	zone->noreuse = 1;
     zone->init = ngx_http_status_api_init_zone;
 
-    /*
-    if (ngx_http_status_api_add_shm_to_ctx(cf, zone, name)!= NGX_OK) {
-        ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] Can't create context for shm zone.", name);
-        return NULL;
-    };
-	*/
     return zone;
 }
 
@@ -209,13 +148,18 @@ ngx_http_status_api(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
  * process to counters in shm */
 static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
     ngx_uint_t                       s, tmp;
-    ngx_http_core_main_conf_t       *cmcf = ev->data;
+    ngx_http_core_main_conf_t       *cmcf;
+    ngx_http_core_main_conf_t  *cmcflocal;
     ngx_http_ssl_srv_conf_t         *sscf;
     ngx_http_core_srv_conf_t       **cscfp;
     ngx_http_status_api_srv_conf_t  *sslscf;
     ngx_http_status_api_srv_conf_t  *hsamcf;
     ngx_http_status_api_counters_t  *counters;
     ngx_slab_pool_t                           *shpool;
+	ngx_cycle_t *cycle = ev->data;
+
+    cmcf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_core_module);
+    cmcflocal = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_status_api_module);
 
     #ifdef NGX_DEBUG
       ngx_log_error(NGX_LOG_INFO, ev->log, 0,
@@ -240,7 +184,7 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
     // get all servers in current worker
     cscfp = cmcf->servers.elts;
     //ngx_http_conf_get_module_main_conf(cf, ngx_http_my_module);
-	hsamcf = (ngx_http_status_api_srv_conf_t *) cmcf;
+	hsamcf = (ngx_http_status_api_srv_conf_t *) cmcflocal;
 
     // for server_index in servers
     #ifdef NGX_DEBUG
@@ -292,7 +236,7 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
         } else if (hsamcf->shm_zone != NULL && sscf->ssl.ctx != NULL && hsamcf->shm_zone->shm.addr != NULL) {
       		dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to default status_zone",s);
 
-            shpool = (ngx_slab_pool_t *) sslscf->shm_zone->shm.addr;
+            shpool = (ngx_slab_pool_t *) hsamcf->shm_zone->shm.addr;
             if (shpool == NULL) {
       			dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Var is NULL shpool.",s);
                 continue;
@@ -319,8 +263,6 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
             dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Try unlock mutex for shpool",s);
             ngx_shmtx_unlock(&shpool->mutex);//Mutex
             dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Mutex unlock SUCCESS.",s);
-
-
         } else {
             dbg_http_status_api_log_error(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Strange variant, some bugs may be:-)",s);
         }
@@ -424,7 +366,6 @@ static void *ngx_http_status_api_create_srv_conf(ngx_conf_t *cf) {
     conf = ngx_palloc(cf->pool, sizeof(ngx_http_status_api_srv_conf_t));
     conf->prev_counters = ngx_pcalloc(cf->pool,
             sizeof(ngx_http_status_api_counters_t));
-    dbg_http_status_api_conf_log_info(cf,"[http-status-api][ngx_http_status_api_create_srv_conf] conf->prev_counters allocation success");
     return conf;
 }
 
@@ -444,21 +385,17 @@ static void *ngx_http_status_api_create_loc_conf(ngx_conf_t *cf) {
 
 /* When a worker has started: run periodic task to poll openssl stats */
 static ngx_int_t ngx_http_status_api_module_init_worker(ngx_cycle_t *cycle) {
-    ngx_http_core_main_conf_t  *cmcf = ngx_http_cycle_get_module_main_conf(
-            cycle, ngx_http_core_module);
-
-
+    //Add poll stat timer
     ngx_http_status_api_timer.handler = ngx_http_status_api_poll_stat;
     ngx_http_status_api_timer.log = cycle->log;
-    // attach ngx_http_core_main_conf_t struct to access all configured servers
-    ngx_http_status_api_timer.data = cmcf;
-    // allows workers shutting down gracefully
-    ngx_http_status_api_timer.cancelable = 1;
+    ngx_http_status_api_timer.data = cycle; // attach ngx_cycle_t struct to access to statistic shm
+    ngx_http_status_api_timer.cancelable = 1;// allows workers shutting down gracefully
+	ngx_add_timer(&ngx_http_status_api_timer, STAT_POLL_INTERVAL);
 
+    //Add top filter for aggregate response statistic
     ngx_http_next_header_filter = ngx_http_top_header_filter;
     ngx_http_top_header_filter = ngx_http_status_api_server_zone_counter;
 
-    ngx_add_timer(&ngx_http_status_api_timer, STAT_POLL_INTERVAL);
     return NGX_OK;
 }
 

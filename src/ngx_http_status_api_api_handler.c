@@ -448,14 +448,51 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
     ngx_uint_t 							handshake_timeout = 0;
     ngx_uint_t						    handshakes_failed = 0;
     ngx_slab_pool_t                     *shpool;
+    ngx_http_core_main_conf_t 			*cmcf;
     ngx_http_core_srv_conf_t            **cscfp;
     ngx_http_status_api_srv_conf_t      *sslscf;
+    ngx_http_status_api_srv_conf_t      *hsamcf;
 
+    //Get default zone stat
+    cmcf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);
+    hsamcf = (ngx_http_status_api_srv_conf_t *) cmcf;
+    if (hsamcf!= NULL && hsamcf->shm_zone != NULL && hsamcf->shm_zone->shm.addr != NULL) {
+      		dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Get stat from default status_zone");
+            shpool = (ngx_slab_pool_t *) hsamcf->shm_zone->shm.addr;
+            if (shpool != NULL)  {
+            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Try lock mutex for shpool.");
+            	ngx_shmtx_lock(&shpool->mutex);//Mutex
+            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Mutex lock SUCCESS.");
+
+            	counters = hsamcf->shm_zone->data;
+                if (counters!=NULL) {
+
+                	handshakes += counters->ssl_accept;
+                	handshakes_failed += counters->ssl_accept - counters->ssl_accept_good;
+                	session_reuses +=  counters->ssl_hits;
+                	handshake_timeout += counters->ssl_timeouts;
+
+         		} else {
+              		dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][default] counters is NULL");
+            	}
+                dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Try unlock mutex for shpool.");
+            	ngx_shmtx_unlock(&shpool->mutex);//Mutex
+            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Mutex unlock SUCCESS.");
+
+            } else {
+      			dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Var is NULL shpool.");
+            }
+    }
+
+    //Get servers status_zone stat
     // get core main conf
-    ngx_http_core_main_conf_t *cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
     // get all servers in current worker
     cscfp = cmcf->servers.elts;
     num = cmcf->servers.nelts;
+
+;
+
 
     for (i = 0; i < num ; i++) {
        	sslscf = cscfp[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
@@ -482,9 +519,9 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
                 dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Mutex unllock SUCCESS.",i);
 
 
-              } else {
+            } else {
               	dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] counters is NULL found",i);
-              }
+            }
         }
     }
 

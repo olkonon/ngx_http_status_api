@@ -65,6 +65,7 @@ typedef struct {
     ngx_http_status_api_counters_t *prev_counters;
 } ngx_http_status_api_srv_conf_t;
 
+
 //export module for linking
 extern ngx_module_t ngx_http_status_api_module;
 
