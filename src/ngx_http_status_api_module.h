@@ -10,7 +10,7 @@
 #include <ngx_http.h>
 
 
-#define SHM_SIZE 65536
+#define SHM_SIZE 8192
 #define SHM_DEFAULT_NAME "default"
 #define STAT_POLL_INTERVAL 1000
 
@@ -20,6 +20,8 @@
 
     #define dbg_http_status_api_conf_log_error(cf,...)                ngx_conf_log_error (NGX_LOG_ERR, cf, 0, __VA_ARGS__)
     #define dbg_http_status_api_log_error(log,...)                    ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
+
+    #define http_status_api_log_error(log,...)                        ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
 #else
     #define dbg_http_status_api_conf_log_info(cf,...)
     #define dbg_http_status_api_log_info(log,...)
@@ -28,7 +30,8 @@
     #define dbg_http_status_api_log_error(log,...)
 #endif
 
-ngx_array_t *get_http_status_api_ctx();
+//ngx_array_t *get_http_status_api_ctx();
+
 int *get_config_load_time();
 
 typedef struct {
@@ -46,10 +49,10 @@ typedef struct {
     ngx_uint_t out_bytes;
 } ngx_http_status_api_counters_t;
 
-typedef struct {
-    ngx_str_t name;
-    ngx_shm_zone_t *shm_zone;
-} ngx_http_status_api_ctx_record_t;
+//typedef struct {
+//    ngx_str_t name;
+//    ngx_shm_zone_t *shm_zone;
+//} ngx_http_status_api_ctx_record_t;
 
 
 typedef struct {

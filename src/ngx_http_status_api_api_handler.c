@@ -4,6 +4,7 @@
 #include <ngx_config.h>
 #include <ngx_core.h>
 #include <ngx_http.h>
+#include <ngx_string.h>
 #include "ngx_http_status_api_module.h"
 #include "ngx_http_status_api_handler_upstreams.h"
 #include "ngx_http_status_api_handler_streams.h"
@@ -271,79 +272,7 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     return NGX_HTTP_NOT_FOUND;
 }
 
-//handle SSL statistic
-static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
-    ngx_uint_t                          i,num;
-    ngx_array_t                         *http_status_api_ctx;
-    ngx_http_status_api_counters_t      *counters;
-    ngx_http_status_api_ctx_record_t    *records;
-    ngx_buf_t                           *b;
-    ngx_chain_t                         out;
-    ngx_int_t                           rc;
-    ngx_uint_t                          handshakes,session_reuses,handshake_timeout,handshakes_failed;
-    ngx_slab_pool_t                           *shpool;
 
-    http_status_api_ctx = get_http_status_api_ctx();
-
-    if (http_status_api_ctx == NULL) {
-        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "[http-status-api] null context");
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-    num = http_status_api_ctx->nelts;
-    records = http_status_api_ctx->elts;
-
-    handshake_timeout = 0;
-    handshakes = 0;
-    session_reuses =0;
-    handshakes_failed = 0;
-
-
-
-    for (i = 0; i < num ; i++) {
-        if ( records!=NULL) {
-              shpool = (ngx_slab_pool_t *) records[i].shm_zone->shm.addr;
-
-              counters = records[i].shm_zone->data;
-              if (counters!=NULL) {
-                ngx_shmtx_lock(&shpool->mutex);//Mutex
-                handshakes += counters->ssl_accept;
-                handshakes_failed += counters->ssl_accept - counters->ssl_accept_good;
-                session_reuses +=  counters->ssl_hits;
-                handshake_timeout += counters->ssl_timeouts;
-                ngx_shmtx_unlock(&shpool->mutex);//Mutex
-              } else {
-                  ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[http-status-api] zone %ui counters is NULL found",i);
-              }
-        }
-    }
-
-
-
-    b = ngx_create_temp_buf(r->pool, 65535);
-    if (b == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    out.buf = b;
-    out.next = NULL;
-
-    b->last = ngx_sprintf(b->last, "{\"handshakes\":%ui,\"session_reuses\":%ui,\"handshakes_failed\":%ui,\"handshake_timeout\":%ui}",
-            handshakes,session_reuses,handshakes_failed,handshake_timeout);
-
-    r->headers_out.status = NGX_HTTP_OK;
-    r->headers_out.content_length_n = b->last - b->pos;
-
-    b->last_buf = (r == r->main) ? 1 : 0;
-    b->last_in_chain = 1;
-
-    rc = ngx_http_send_header(r);
-
-    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-        return rc;
-    }
-
-    return ngx_http_output_filter(r, &out);
-}
 
 
 //handle nginx statistic
@@ -388,26 +317,17 @@ static ngx_int_t ngx_http_status_api_api_handler_nginx(ngx_http_request_t *r) {
 
 //handle server_zones statistic
 static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t *r) {
-   ngx_uint_t                          i,num;
-    ngx_array_t                         *http_status_api_ctx;
+    ngx_uint_t                          i,num;
     ngx_http_status_api_counters_t      *counters;
-    ngx_http_status_api_ctx_record_t    *records;
     ngx_buf_t                           *b;
     ngx_chain_t                         out;
     ngx_int_t                           rc;
     ngx_uint_t                          handshakes,session_reuses,handshake_timeout,handshakes_failed;
     ngx_uint_t resp_total,resp_1xx,resp_2xx,resp_3xx,resp_4xx,resp_5xx,in_bytes,out_bytes;
     ngx_slab_pool_t                     *shpool;
+    ngx_http_core_srv_conf_t            **cscfp;
+    ngx_http_status_api_srv_conf_t      *sslscf;
 
-    http_status_api_ctx = get_http_status_api_ctx();
-
-    if (http_status_api_ctx == NULL) {
-        ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "[http-status-api] null context");
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    num = http_status_api_ctx->nelts;
-    records = http_status_api_ctx->elts;
 
     b = ngx_create_temp_buf(r->pool, 655350);
     if (b == NULL) {
@@ -419,66 +339,85 @@ static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t
 
     b->last = ngx_sprintf(b->last, "{");
 
-    for (i = 0; i < num ; i++) {
-        if ( records!=NULL) {
-            b->last = ngx_sprintf(b->last, "\"%V\":{",&records[i].name);
-              shpool = (ngx_slab_pool_t *) records[i].shm_zone->shm.addr;
+    // get core main conf
+    ngx_http_core_main_conf_t *cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    // get all servers in current worker
+    cscfp = cmcf->servers.elts;
+    num = cmcf->servers.nelts;
 
-              counters = records[i].shm_zone->data;
-              if (counters!=NULL) {
+    for (i = 0; i < num; i++) {
+        // this module config
+        sslscf = cscfp[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
+        if (sslscf->shm_zone != NULL  && sslscf->shm_zone->shm.addr != NULL) {
+            shpool = (ngx_slab_pool_t *) sslscf->shm_zone->shm.addr;
+            if (shpool == NULL) {
+                dbg_http_status_api_log_error(r->connection->log,"[http-status-api][api_handler_server_zones][%i] Var is NULL shpool.",i);
+                continue;
+            }
+            counters = sslscf->shm_zone->data;
+            if (counters!=NULL) {
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Try lock mutex for shpool.",i);
                 ngx_shmtx_lock(&shpool->mutex);//Mutex
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Mutex lock SUCCESS.",i);
+
                 handshakes = counters->ssl_accept;
                 handshakes_failed = counters->ssl_accept - counters->ssl_accept_good;
                 session_reuses =  counters->ssl_hits;
                 handshake_timeout = counters->ssl_timeouts;
 
-    			resp_total = counters->resp_total;
-    			resp_1xx = counters->resp_1xx;
-    			resp_2xx = counters->resp_2xx;
-    			resp_3xx = counters->resp_3xx;
-    			resp_4xx = counters->resp_4xx;
-    			resp_5xx = counters->resp_5xx;
-    			in_bytes = counters->in_bytes;
-    			out_bytes = counters->out_bytes;
+                resp_total = counters->resp_total;
+                resp_1xx = counters->resp_1xx;
+                resp_2xx = counters->resp_2xx;
+                resp_3xx = counters->resp_3xx;
+                resp_4xx = counters->resp_4xx;
+                resp_5xx = counters->resp_5xx;
+                in_bytes = counters->in_bytes;
+                out_bytes = counters->out_bytes;
 
+
+
+
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%s] Stat from zones get success",sslscf->shm_zone->shm.name.data);
+                b->last = ngx_sprintf(b->last, "\"%s\":{",sslscf->shm_zone->shm.name.data);
+
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Try unlock mutex for shpool.",i);
                 ngx_shmtx_unlock(&shpool->mutex);//Mutex
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Mutex unlock SUCCESS.",i);
 
                 b->last = ngx_sprintf(b->last, "\"ssl\":{\"handshakes\":%ui,\"session_reuses\":%ui,\"handshakes_failed\":%ui,\"handshake_timeout\":%ui},",
                   handshakes,session_reuses,handshakes_failed,handshake_timeout);
                 b->last = ngx_sprintf(b->last,
                                     "\"responses\":{"
-										"\"total\": %ui,"
+                                        "\"total\": %ui,"
                                         "\"1xx\": %ui,"
                                         "\"2xx\": %ui,"
                                         "\"3xx\": %ui,"
-                                      	"\"4xx\": %ui,"
-                                      	"\"5xx\": %ui"
+                                          "\"4xx\": %ui,"
+                                          "\"5xx\": %ui"
                                     "},",
-                                      	resp_total,
-                                      	resp_1xx,
-                                      	resp_2xx,
-                                      	resp_3xx,
-                                      	resp_4xx,
-                                      	resp_5xx);
+                                          resp_total,
+                                          resp_1xx,
+                                          resp_2xx,
+                                          resp_3xx,
+                                          resp_4xx,
+                                          resp_5xx);
                 b->last = ngx_sprintf(b->last,
                                     "\"received\": %ui,"
                                     "\"sent\": %ui", in_bytes, out_bytes);
-              } else {
-                  ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[http-status-api] zone %ui counters is NULL found",i);
-              }
-            if (i == num-1) {
-                b->last = ngx_sprintf(b->last, "}",records[i].name);
-            } else {
-                b->last = ngx_sprintf(b->last, "},",records[i].name);
-            }
+                } else {
+                    http_status_api_log_error(r->connection->log,"[http-status-api][api_handler_server_zones] zone %i counters is NULL found",i);
+                }
+
+                if (i == num-1) {
+                    b->last = ngx_sprintf(b->last, "}");
+                } else {
+                    b->last = ngx_sprintf(b->last, "},");
+                }
         }
+
     }
+
     b->last = ngx_sprintf(b->last, "}");
-
-
-
-
-
 
 
     r->headers_out.status = NGX_HTTP_OK;
@@ -496,6 +435,86 @@ static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t
     return ngx_http_output_filter(r, &out);
 }
 
+
+//handle SSL statistic
+static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
+    ngx_uint_t                          i,num;
+    ngx_http_status_api_counters_t      *counters;
+    ngx_buf_t                           *b;
+    ngx_chain_t                         out;
+    ngx_int_t                           rc;
+    ngx_uint_t                          handshakes = 0;
+    ngx_uint_t            				session_reuses = 0;
+    ngx_uint_t 							handshake_timeout = 0;
+    ngx_uint_t						    handshakes_failed = 0;
+    ngx_slab_pool_t                     *shpool;
+    ngx_http_core_srv_conf_t            **cscfp;
+    ngx_http_status_api_srv_conf_t      *sslscf;
+
+    // get core main conf
+    ngx_http_core_main_conf_t *cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    // get all servers in current worker
+    cscfp = cmcf->servers.elts;
+    num = cmcf->servers.nelts;
+
+    for (i = 0; i < num ; i++) {
+       	sslscf = cscfp[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
+        if (sslscf->shm_zone != NULL  && sslscf->shm_zone->shm.addr != NULL) {
+            shpool = (ngx_slab_pool_t *) sslscf->shm_zone->shm.addr;
+            if (shpool == NULL) {
+                dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Var is NULL shpool.",i);
+                continue;
+            }
+            counters = sslscf->shm_zone->data;
+            if (counters!=NULL) {
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Try lock mutex for shpool.",i);
+                ngx_shmtx_lock(&shpool->mutex);//Mutex
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Mutex lock SUCCESS.",i);
+
+
+                handshakes += counters->ssl_accept;
+                handshakes_failed += counters->ssl_accept - counters->ssl_accept_good;
+                session_reuses +=  counters->ssl_hits;
+                handshake_timeout += counters->ssl_timeouts;
+
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Try unlock mutex for shpool.",i);
+                ngx_shmtx_unlock(&shpool->mutex);//Mutex
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Mutex unllock SUCCESS.",i);
+
+
+              } else {
+              	dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] counters is NULL found",i);
+              }
+        }
+    }
+
+
+
+    b = ngx_create_temp_buf(r->pool, 65535);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    out.buf = b;
+    out.next = NULL;
+
+    b->last = ngx_sprintf(b->last, "{\"handshakes\":%ui,\"session_reuses\":%ui,\"handshakes_failed\":%ui,\"handshake_timeout\":%ui}",
+            handshakes,session_reuses,handshakes_failed,handshake_timeout);
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = b->last - b->pos;
+
+    b->last_buf = (r == r->main) ? 1 : 0;
+    b->last_in_chain = 1;
+
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    return ngx_http_output_filter(r, &out);
+}
 
 
 #ifdef NGX_STAT_STUB

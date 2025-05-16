@@ -10,10 +10,10 @@
 #include "ngx_http_status_api_module.h"
 #include "ngx_http_status_api_api_handler.h"
 
-static ngx_array_t *http_status_api_ctx = NULL;
-ngx_array_t *get_http_status_api_ctx() {
-  return http_status_api_ctx;
-}
+//static ngx_array_t *http_status_api_ctx = NULL;
+//ngx_array_t *get_http_status_api_ctx() {
+//  return http_status_api_ctx;
+//}
 
 static int *load_config_sec = NULL;
 
@@ -107,7 +107,7 @@ ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
 
     return NGX_OK;
 }
-
+/*
 static ngx_int_t ngx_http_status_api_add_shm_to_ctx(ngx_conf_t *cf,ngx_shm_zone_t *shm_zone,ngx_str_t *name) {
     ngx_http_status_api_ctx_record_t *record,*records;
     ngx_uint_t i;
@@ -157,72 +157,14 @@ static ngx_int_t ngx_http_status_api_add_shm_to_ctx(ngx_conf_t *cf,ngx_shm_zone_
 
     return NGX_OK;
 }
-
+*/
 
 static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
-    ngx_str_t *shm_name_prefix;
-    ngx_str_t *shm_name;
-    ngx_http_status_api_ctx_record_t *records;
-    ngx_uint_t i;
-  //  ngx_slab_pool_t *shpool;
-
 	#ifdef NGX_DEBUG
     	ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] Start init zone.", name);
     #endif
-
-    //Init prefix for shm status_zone
-    shm_name_prefix = ngx_palloc(cf->pool,sizeof(ngx_str_t));
-    ngx_str_set(shm_name_prefix,"http-status-api-");
-
-    //Init real name of shm
-    shm_name = ngx_pcalloc(cf->pool,sizeof(ngx_str_t));
-    if (shm_name == NULL) {
-        ngx_conf_log_error(NGX_LOG_ERR, cf, 0,"[http-status-api][get_or_create_shm_zone][%V] Can't alocate mem for zone creating.", name);
-        return NULL;
-    }
-
-    shm_name->len = shm_name_prefix->len + name->len + 1;
-    shm_name->data = ngx_pcalloc(cf->pool,sizeof(u_char)*shm_name->len);
-    ngx_snprintf(shm_name->data, shm_name->len, "%V%V", shm_name_prefix, name);
-    ngx_pfree(cf->pool,shm_name_prefix);
-
-    //Find zone in context
-    if (http_status_api_ctx != NULL) {
-        #ifdef NGX_DEBUG
-    		ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] Context not is NULL start extracting zone from context.", name);
-		#endif
-       	//Extract zzone adress from context
-       	records = http_status_api_ctx->elts;
-        #ifdef NGX_DEBUG
-    		ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[http-status-api][get_or_create_shm_zone][%V] Get records success", name);
-		#endif
-      	for(i=0;i<http_status_api_ctx->nelts;i++) {
-        	if (ngx_strcmp(&records[i].name, name) == 0) {
-
-               // shpool = (ngx_slab_pool_t *) records[i].shm_zone->shm.addr;
-      		//	ngx_shmtx_lock(&shpool->mutex);
-                ngx_shm_zone_t *zone_pointer = records[i].shm_zone;
-              //  ngx_shmtx_unlock(&shpool->mutex);
-
-                if (zone_pointer == NULL) {
-                	ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] zone address in context is NuLL.", name);
-                    return NULL;
-                }
-				#ifdef NGX_DEBUG
-          			ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] zone found in context success.", name);
-                #endif
-                return zone_pointer;
-            }
-        }
-    }
-
-   	#ifdef NGX_DEBUG
-   		ngx_conf_log_error(NGX_LOG_INFO, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] No zones found try create new", name);
- 	#endif
-    //Zone not found in context
     //Create SHM
-    ngx_shm_zone_t* zone = ngx_shared_memory_add(cf, shm_name, SHM_SIZE,
-                                                 &ngx_http_status_api_module);
+	ngx_shm_zone_t* zone = ngx_shared_memory_add(cf, name, SHM_SIZE,&ngx_http_status_api_module);
     if (zone == NULL) {
     	ngx_conf_log_error(NGX_LOG_ERR, cf, 0,"[http-status-api][get_or_create_shm_zone][%V] Error accessing shm-zone", name);
         return NULL;
@@ -230,12 +172,12 @@ static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
 	zone->noreuse = 1;
     zone->init = ngx_http_status_api_init_zone;
 
-
+    /*
     if (ngx_http_status_api_add_shm_to_ctx(cf, zone, name)!= NGX_OK) {
         ngx_conf_log_error(NGX_LOG_ERR, cf, 0, "[http-status-api][get_or_create_shm_zone][%V] Can't create context for shm zone.", name);
         return NULL;
     };
-
+	*/
     return zone;
 }
 
