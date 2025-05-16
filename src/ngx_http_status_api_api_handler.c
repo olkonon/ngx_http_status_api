@@ -405,7 +405,7 @@ static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t
                                     "\"received\": %ui,"
                                     "\"sent\": %ui", in_bytes, out_bytes);
                 } else {
-                    http_status_api_log_error(r->connection->log,"[http-status-api][api_handler_server_zones] zone %i counters is NULL found",i);
+                    dbg_http_status_api_log_error(r->connection->log,"[http-status-api][api_handler_server_zones] zone %i counters is NULL found",i);
                 }
 
                 if (i == num-1) {
