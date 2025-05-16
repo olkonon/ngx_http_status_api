@@ -304,37 +304,21 @@ static void *ngx_http_status_api_create_main_conf(ngx_conf_t *cf) {
 
     ngx_str_t default_zone_name = ngx_string(SHM_DEFAULT_NAME);
 
-    #ifdef NGX_DEBUG
-   		ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[ngx_http_status_api_create_main_conf][%V] Init status zone from configuration",&default_zone_name );
-    #endif
+    dbg_http_status_api_conf_log_info(cf,"[ngx_http_status_api_create_main_conf][%V] Init status zone from configuration",&default_zone_name);
+
     conf = ngx_palloc(cf->pool, sizeof(ngx_http_status_api_srv_conf_t));
-    #ifdef NGX_DEBUG
-   		ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[http-status-api][ngx_http_status_api_create_main_conf][%V] new conf allocation success",&default_zone_name );
-    #endif
-    conf->prev_counters = ngx_pcalloc(cf->pool,
-            sizeof(ngx_http_status_api_counters_t));
-    #ifdef NGX_DEBUG
-   		ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[http-status-api][ngx_http_status_api_create_main_conf][%V] conf->prev_counters allocation success",&default_zone_name );
-    #endif
+    dbg_http_status_api_conf_log_info(cf,"[http-status-api][ngx_http_status_api_create_main_conf][%V] new conf allocation success",&default_zone_name);
+
+    conf->prev_counters = ngx_pcalloc(cf->pool,sizeof(ngx_http_status_api_counters_t));
+    dbg_http_status_api_conf_log_info(cf,"[http-status-api][ngx_http_status_api_create_main_conf][%V] conf->prev_counters allocation success",&default_zone_name);
+
     ngx_shm_zone_t *shm_zone = get_or_create_shm_zone(cf, &default_zone_name);
 	if (conf->shm_zone == NULL) {
-          #ifdef NGX_DEBUG
-   			ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[http-status-api][ngx_http_status_api_create_main_conf][%V] conf->shm_zone is NULL reinit",&default_zone_name );
-    	  #endif
+          dbg_http_status_api_conf_log_info(cf,"[http-status-api][ngx_http_status_api_create_main_conf][%V] conf->shm_zone is NULL reinit",&default_zone_name);
           conf->shm_zone = shm_zone;
-
-	} else {
-        #ifdef NGX_DEBUG
-   			ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[http-status-api][ngx_http_status_api_create_main_conf][%V] conf->shm_zone is not NULL!",&default_zone_name );
-    	#endif
 	}
 
-    if (conf->shm_zone == NULL)
-        return NULL;
-
-    #ifdef NGX_DEBUG
-   		ngx_log_error(NGX_LOG_INFO, cf->log, 0, "[http-status-api][ngx_http_status_api_create_main_conf][%V] Init status zone from configuration SUCCESS!",&default_zone_name );
-    #endif
+	dbg_http_status_api_conf_log_info(cf, "[http-status-api][ngx_http_status_api_create_main_conf][%V] Init status zone from configuration SUCCESS!",&default_zone_name);
     return conf;
 }
 
@@ -380,11 +364,31 @@ static ngx_int_t ngx_http_status_api_module_init_worker(ngx_cycle_t *cycle) {
 
 ngx_int_t get_in_request_body_size(ngx_http_request_t *r) {
     ngx_int_t size = 0;
+    ngx_list_part_t *part = &r->headers_in.headers.part;
+    ngx_table_elt_t *header = part->elts;
 
-    if (r->headers_in.content_length_n != -1) {
-        size = r->headers_in.content_length_n;
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][get_in_request_body_size] Get Request %V, size: %i",&r->request_line,r->request_line.len);
+    size += r->request_line.len+2;//+ "\r\n"
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][get_in_request_body_size] Header count %i",part->nelts);
+    for (ngx_uint_t i = 0;i < part->nelts ; i++) {
+        dbg_http_status_api_log_info(r->connection->log,
+                                     "[http-status-api][get_in_request_body_size][%i] Header %V : %V len %i",i,
+                                     &header[i].key, &header[i].value, header[i].key.len+2+header[i].value.len);
+        size += header[i].key.len + 2 + header[i].value.len + 2; // +2 for ": " and +2 for "\r\n"
     }
 
+    // Add "\r\n", body divider
+    size += 2;
+
+     dbg_http_status_api_log_info(r->connection->log,"[http-status-api][get_in_request_body_size] Header summary size=%i",size);
+
+
+    if (r->headers_in.content_length_n != -1) {
+        size += r->headers_in.content_length_n;
+    }
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][get_in_request_body_size] Summary out size %i",size);
     return size;
 }
 
@@ -392,10 +396,24 @@ ngx_int_t get_in_request_body_size(ngx_http_request_t *r) {
 ngx_int_t get_out_request_body_size(ngx_http_request_t *r) {
     ngx_int_t size = 0;
 
-    if (r->headers_out.content_length_n != -1) {
-        size = r->headers_out.content_length_n;
+    ngx_list_part_t *part = &r->headers_out.headers.part;
+    ngx_table_elt_t *header = part->elts;
+
+    for (ngx_uint_t i = 0; i < part->nelts; i++) {
+        dbg_http_status_api_log_info(r->connection->log,
+                                     "[http-status-api][get_out_request_body_size][%i] Header %V : %V len %i",i,
+                                     &header[i].key, &header[i].value, header[i].key.len+2+header[i].value.len);
+        size += header[i].key.len + 2 + header[i].value.len + 2; // +2 for ": " and +2 for "\r\n"
     }
 
+    // Add "\r\n", body divider
+    size += 2;
+
+    if (r->headers_out.content_length_n != -1) {
+        size += r->headers_out.content_length_n;
+    }
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][get_out_request_body_size] Summary out size %i",size);
     return size;
 }
 
