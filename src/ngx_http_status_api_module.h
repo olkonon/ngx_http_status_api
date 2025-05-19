@@ -17,6 +17,7 @@
 
 //logging primitives
 #define http_status_api_log_error(log,...)                        ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
+#define http_status_api_conf_log_error(cf,...)                    ngx_conf_log_error (NGX_LOG_ERR, cf, 0, __VA_ARGS__)
 
 #ifdef NGX_DEBUG
     #define dbg_http_status_api_conf_log_info(cf,...)                 ngx_conf_log_error (NGX_LOG_INFO, cf, 0, __VA_ARGS__)
