@@ -304,7 +304,7 @@ static ngx_int_t ngx_http_status_api_module_init_worker(ngx_cycle_t *cycle) {
     ngx_http_top_header_filter = ngx_http_status_api_server_zone_counter;
     return NGX_OK;
 }
-/*
+
 //Counting request size for stat
 ngx_int_t get_in_request_body_size(ngx_http_request_t *r) {
     ngx_int_t size = 0;
@@ -360,56 +360,57 @@ ngx_int_t get_out_request_body_size(ngx_http_request_t *r) {
     dbg_http_status_api_log_info(r->connection->log,"[http-status-api][get_out_request_body_size] Summary out size %i",size);
     return size;
 }
-*/
+
+//+ Callback to write response stat to SHM
 static ngx_int_t ngx_http_status_api_server_zone_counter(ngx_http_request_t *r) {
-    #define ngx_http_status_api_add_response_counter_delta(counter, delta) \
-        counters->counter += delta; \
- /* ngx_http_status_api_srv_conf_t  *srv_cf;
-  ngx_uint_t in_bytes,out_bytes;
-  ngx_http_status_api_counters_t  *counters;
-  ngx_slab_pool_t                           *shpool;
-  ngx_int_t status;
+    #define ngx_http_status_api_add_response_counter_delta(counter,delta)   \
+        ctx->counters->counter += delta;                                    \
 
-  srv_cf = ngx_http_get_module_srv_conf(r, ngx_http_status_api_module);
-  in_bytes = get_in_request_body_size(r);
-  out_bytes = get_out_request_body_size(r);
-  status = r->headers_out.status;
+    ngx_http_status_api_shm_ctx     *ctx;
+    ngx_http_status_api_srv_conf_t  *server_conf;
+    ngx_http_status_api_srv_conf_t  *self_main_conf;
+    ngx_uint_t                      in_bytes,out_bytes;
+    ngx_int_t                       status;
+
+    server_conf = ngx_http_get_module_srv_conf(r, ngx_http_status_api_module);
+    self_main_conf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);;
+
+    in_bytes = get_in_request_body_size(r);
+    out_bytes = get_out_request_body_size(r);
+    status = r->headers_out.status;
 
 
-  if ( (srv_cf !=NULL ) && (srv_cf->shm_zone != NULL) ) {
-      shpool = (ngx_slab_pool_t *) srv_cf->shm_zone->shm.addr;
-      ngx_shmtx_lock(&shpool->mutex); //Mutex
+    if (server_conf->shm_zone != NULL) {
+        dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter][%s] Write response stat to zone",server_conf->shm_zone->shm.name.data);
+        ctx = server_conf->shm_zone->data;
+    } else {
+        dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter][%s] Write response stat to zone",self_main_conf->shm_zone->shm.name.data);
+        ctx =  self_main_conf->shm_zone->data;
+    }
 
-      counters = srv_cf->shm_zone->data;
+    dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] Try lock mutex for SHM.");
+    ngx_shmtx_lock(&ctx->shpool->mutex);//Mutex
+    dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] Mutex lock success.");
 
-      if ( status >= 0 &&   status <200) {
-             ngx_http_status_api_add_response_counter_delta(
-                    resp_1xx, 1);
-      } else if (status >= 200 && status < 300) {
-                     ngx_http_status_api_add_response_counter_delta(
-                    resp_2xx, 1);
-      } else if (status >= 300 && status < 400) {
-                          ngx_http_status_api_add_response_counter_delta(
-                    resp_3xx, 1);
-      } else if (status >= 400 && status < 500) {
-                          ngx_http_status_api_add_response_counter_delta(
-                    resp_4xx, 1);
-      } else if (status >= 500 && status < 600) {
-                          ngx_http_status_api_add_response_counter_delta(
-                    resp_5xx, 1);
-      }
+    if ( status >= 0 &&   status <200) {
+        ngx_http_status_api_add_response_counter_delta(resp_1xx,1);
+    } else if (status >= 200 && status < 300) {
+        ngx_http_status_api_add_response_counter_delta(resp_2xx,1);
+    } else if (status >= 300 && status < 400) {
+        ngx_http_status_api_add_response_counter_delta(resp_3xx,1);
+    } else if (status >= 400 && status < 500) {
+        ngx_http_status_api_add_response_counter_delta(resp_4xx,1);
+    } else if (status >= 500 && status < 600) {
+        ngx_http_status_api_add_response_counter_delta(resp_5xx,1);
+    }
 
-      ngx_http_status_api_add_response_counter_delta(
-                    resp_total, 1);
+    ngx_http_status_api_add_response_counter_delta(resp_total,1);
+    ngx_http_status_api_add_response_counter_delta(in_bytes, in_bytes);
+    ngx_http_status_api_add_response_counter_delta(out_bytes, out_bytes);
 
-       ngx_http_status_api_add_response_counter_delta(
-                   in_bytes,in_bytes);
+    dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] Try unlock mutex for SHM.");
+    ngx_shmtx_unlock(&ctx->shpool->mutex);//Mutex
+    dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] Mutex unlock success.");
 
-        ngx_http_status_api_add_response_counter_delta(
-                    out_bytes, out_bytes);
-       ngx_shmtx_unlock(&shpool->mutex);//Mutext
-  }
-
-*/
-  return ngx_http_next_header_filter(r);
+    return ngx_http_next_header_filter(r);
 }
