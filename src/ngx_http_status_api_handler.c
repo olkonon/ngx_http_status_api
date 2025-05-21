@@ -405,6 +405,118 @@ static ngx_int_t ngx_http_status_api_handler_requests (ngx_http_request_t *r) {
 }
 #endif
 
+//+ Handle SSL statistic
+static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
+    ngx_buf_t                           *b;
+    ngx_chain_t                         out;
+    ngx_int_t                           rc;
+
+    ngx_uint_t                          handshakes = 0;
+    ngx_uint_t            				session_reuses = 0;
+    ngx_uint_t 							handshake_timeout = 0;
+    ngx_uint_t						    handshakes_failed = 0;
+
+    ngx_http_core_srv_conf_t            **servers_conf_list;
+    ngx_uint_t                          servers_num = 0;
+    ngx_uint_t                          i;
+    ngx_http_status_api_srv_conf_t      *server_conf;
+
+    ngx_http_status_api_srv_conf_t      *self_main_cf;
+
+    ngx_http_core_main_conf_t 			*core_main_conf;
+    ngx_http_status_api_shm_ctx         *ctx;
+
+
+    self_main_cf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);
+    if (self_main_cf == NULL || self_main_cf->shm_zone==NULL) {
+        http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl] Get default SHM error, pointer is NULL");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    //Get default zone stat
+    ctx = self_main_cf->shm_zone->data;
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Get stat from default status_zone");
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Try lock mutex for SHM.");
+    ngx_shmtx_lock(&ctx->shpool->mutex);//Mutex
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Mutex lock success.");
+
+    handshakes += ctx->counters->ssl_accept;
+    handshakes_failed += ctx->counters->ssl_accept - ctx->counters->ssl_accept_good;
+    session_reuses +=  ctx->counters->ssl_hits;
+    handshake_timeout += ctx->counters->ssl_timeouts;
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Try unlock mutex for SHM.");
+    ngx_shmtx_unlock(&ctx->shpool->mutex);//Mutex
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Mutex unlock success.");
+
+    //Get servers status_zone stat
+    // get core main conf
+    core_main_conf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    if (core_main_conf == NULL) {
+        http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl] Get default SHM error, pointer is NULL");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    // get all servers in current worker
+    servers_conf_list = core_main_conf->servers.elts;
+    servers_num = core_main_conf->servers.nelts;
+
+
+    for (i = 0; i < servers_num ; i++) {
+       	server_conf = servers_conf_list[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
+
+        if (server_conf->shm_zone != NULL) {
+            ctx = server_conf->shm_zone->data;
+
+            dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try lock mutex for SHM.",i);
+            ngx_shmtx_lock(&ctx->shpool->mutex);//Mutex
+            dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Mutex lock success.",i);
+
+
+            handshakes += ctx->counters->ssl_accept;
+            handshakes_failed += ctx->counters->ssl_accept - ctx->counters->ssl_accept_good;
+            session_reuses +=  ctx->counters->ssl_hits;
+            handshake_timeout += ctx->counters->ssl_timeouts;
+
+            dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try unlock mutex for SHM.",i);
+            ngx_shmtx_unlock(&ctx->shpool->mutex);//Mutex
+            dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Mutex unlock success.",i);
+        }
+    }
+
+
+    // Generate response
+    b = ngx_create_temp_buf(r->pool, 8192);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    out.buf = b;
+    out.next = NULL;
+
+    b->last = ngx_sprintf(b->last, NGX_HTTP_STATUS_API_SSL_JSON,
+            handshakes,
+            session_reuses,
+            handshakes_failed,
+            handshake_timeout);
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = b->last - b->pos;
+
+    b->last_buf = (r == r->main) ? 1 : 0;
+    b->last_in_chain = 1;
+
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    return ngx_http_output_filter(r, &out);
+}
+
+
 
 
 //handle server_zones statistic
@@ -526,124 +638,6 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
 
     return ngx_http_output_filter(r, &out);
 }
-
-//handle SSL statistic
-static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
-    ngx_uint_t                          i,num;
-    ngx_http_status_api_counters_t      *counters;
-    ngx_buf_t                           *b;
-    ngx_chain_t                         out;
-    ngx_int_t                           rc;
-    ngx_uint_t                          handshakes = 0;
-    ngx_uint_t            				session_reuses = 0;
-    ngx_uint_t 							handshake_timeout = 0;
-    ngx_uint_t						    handshakes_failed = 0;
-    ngx_slab_pool_t                     *shpool;
-    ngx_http_core_main_conf_t 			*cmcf;
-    ngx_http_core_srv_conf_t            **cscfp;
-    ngx_http_status_api_srv_conf_t      *sslscf;
-    ngx_http_status_api_srv_conf_t      *hsamcf;
-
-    //Get default zone stat
-    cmcf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);
-    hsamcf = (ngx_http_status_api_srv_conf_t *) cmcf;
-    if (hsamcf!= NULL && hsamcf->shm_zone != NULL && hsamcf->shm_zone->shm.addr != NULL) {
-      		dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Get stat from default status_zone");
-            shpool = (ngx_slab_pool_t *) hsamcf->shm_zone->shm.addr;
-            if (shpool != NULL)  {
-            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Try lock mutex for shpool.");
-            	ngx_shmtx_lock(&shpool->mutex);//Mutex
-            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Mutex lock SUCCESS.");
-
-            	counters = hsamcf->shm_zone->data;
-                if (counters!=NULL) {
-
-                	handshakes += counters->ssl_accept;
-                	handshakes_failed += counters->ssl_accept - counters->ssl_accept_good;
-                	session_reuses +=  counters->ssl_hits;
-                	handshake_timeout += counters->ssl_timeouts;
-
-         		} else {
-              		dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][default] counters is NULL");
-            	}
-                dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Try unlock mutex for shpool.");
-            	ngx_shmtx_unlock(&shpool->mutex);//Mutex
-            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Mutex unlock SUCCESS.");
-
-            } else {
-      			dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Var is NULL shpool.");
-            }
-    }
-
-    //Get servers status_zone stat
-    // get core main conf
-    cmcf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
-    // get all servers in current worker
-    cscfp = cmcf->servers.elts;
-    num = cmcf->servers.nelts;
-
-;
-
-
-    for (i = 0; i < num ; i++) {
-       	sslscf = cscfp[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
-        if (sslscf->shm_zone != NULL  && sslscf->shm_zone->shm.addr != NULL) {
-            shpool = (ngx_slab_pool_t *) sslscf->shm_zone->shm.addr;
-            if (shpool == NULL) {
-                dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][%i] Var is NULL shpool.",i);
-                continue;
-            }
-            counters = sslscf->shm_zone->data;
-            if (counters!=NULL) {
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try lock mutex for shpool.",i);
-                ngx_shmtx_lock(&shpool->mutex);//Mutex
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Mutex lock SUCCESS.",i);
-
-
-                handshakes += counters->ssl_accept;
-                handshakes_failed += counters->ssl_accept - counters->ssl_accept_good;
-                session_reuses +=  counters->ssl_hits;
-                handshake_timeout += counters->ssl_timeouts;
-
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try unlock mutex for shpool.",i);
-                ngx_shmtx_unlock(&shpool->mutex);//Mutex
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Mutex unllock SUCCESS.",i);
-
-
-            } else {
-              	dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] counters is NULL found",i);
-            }
-        }
-    }
-
-
-
-    b = ngx_create_temp_buf(r->pool, 65535);
-    if (b == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    out.buf = b;
-    out.next = NULL;
-
-    b->last = ngx_sprintf(b->last, "{\"handshakes\":%ui,\"session_reuses\":%ui,\"handshakes_failed\":%ui,\"handshake_timeout\":%ui}",
-            handshakes,session_reuses,handshakes_failed,handshake_timeout);
-
-    r->headers_out.status = NGX_HTTP_OK;
-    r->headers_out.content_length_n = b->last - b->pos;
-
-    b->last_buf = (r == r->main) ? 1 : 0;
-    b->last_in_chain = 1;
-
-    rc = ngx_http_send_header(r);
-
-    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-        return rc;
-    }
-
-    return ngx_http_output_filter(r, &out);
-}
-
 
 
 
