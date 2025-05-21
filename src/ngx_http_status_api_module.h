@@ -10,11 +10,32 @@
 #include <ngx_http.h>
 
 
-#define SHM_SIZE 65536
+#define SHM_SIZE 2*ngx_pagesize
 #define SHM_DEFAULT_NAME "default"
 #define STAT_POLL_INTERVAL 1000
 
-ngx_array_t *get_http_status_api_ctx();
+
+//logging primitives
+#define http_status_api_log_error(log,...)                        ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
+#define http_status_api_conf_log_error(cf,...)                    ngx_conf_log_error (NGX_LOG_ERR, cf, 0, __VA_ARGS__)
+
+#define http_status_api_log_info(log,...)                        ngx_log_error (NGX_LOG_INFO, log, 0, __VA_ARGS__)
+#define http_status_api_conf_log_info(cf,...)                    ngx_conf_log_error (NGX_LOG_INFO, cf, 0, __VA_ARGS__)
+
+#ifdef NGX_DEBUG
+    #define dbg_http_status_api_conf_log_info(cf,...)                 ngx_conf_log_error (NGX_LOG_INFO, cf, 0, __VA_ARGS__)
+    #define dbg_http_status_api_log_info(log,...)                     ngx_log_error (NGX_LOG_INFO, log, 0, __VA_ARGS__)
+
+    #define dbg_http_status_api_conf_log_error(cf,...)                ngx_conf_log_error (NGX_LOG_ERR, cf, 0, __VA_ARGS__)
+    #define dbg_http_status_api_log_error(log,...)                    ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
+#else
+    #define dbg_http_status_api_conf_log_info(cf,...)
+    #define dbg_http_status_api_log_info(log,...)
+
+    #define dbg_http_status_api_conf_log_error(cf,...)
+    #define dbg_http_status_api_log_error(log,...)
+#endif
+
 int *get_config_load_time();
 
 typedef struct {
@@ -33,10 +54,13 @@ typedef struct {
 } ngx_http_status_api_counters_t;
 
 typedef struct {
-    ngx_str_t name;
-    ngx_shm_zone_t *shm_zone;
-} ngx_http_status_api_ctx_record_t;
+    ngx_slab_pool_t *shpool;
+    ngx_http_status_api_counters_t *prev_counters;
+    ngx_http_status_api_counters_t *counters;
+    int load_config_timestamp;
+    int nginx_load_timestamp;
 
+} ngx_http_status_api_shm_ctx;
 
 typedef struct {
     ngx_shm_zone_t *shm_zone;
@@ -45,8 +69,8 @@ typedef struct {
 
 typedef struct {
     ngx_shm_zone_t *shm_zone;
-    ngx_http_status_api_counters_t *prev_counters;
 } ngx_http_status_api_srv_conf_t;
+
 
 //export module for linking
 extern ngx_module_t ngx_http_status_api_module;
