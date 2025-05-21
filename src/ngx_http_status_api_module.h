@@ -10,7 +10,7 @@
 #include <ngx_http.h>
 
 
-#define SHM_SIZE 8192
+#define SHM_SIZE 2*ngx_pagesize
 #define SHM_DEFAULT_NAME "default"
 #define STAT_POLL_INTERVAL 1000
 
@@ -18,6 +18,9 @@
 //logging primitives
 #define http_status_api_log_error(log,...)                        ngx_log_error (NGX_LOG_ERR, log, 0, __VA_ARGS__)
 #define http_status_api_conf_log_error(cf,...)                    ngx_conf_log_error (NGX_LOG_ERR, cf, 0, __VA_ARGS__)
+
+#define http_status_api_log_info(log,...)                        ngx_log_error (NGX_LOG_INFO, log, 0, __VA_ARGS__)
+#define http_status_api_conf_log_info(cf,...)                    ngx_conf_log_error (NGX_LOG_INFO, cf, 0, __VA_ARGS__)
 
 #ifdef NGX_DEBUG
     #define dbg_http_status_api_conf_log_info(cf,...)                 ngx_conf_log_error (NGX_LOG_INFO, cf, 0, __VA_ARGS__)
@@ -51,13 +54,21 @@ typedef struct {
 } ngx_http_status_api_counters_t;
 
 typedef struct {
+    ngx_slab_pool_t *shpool;
+    ngx_http_status_api_counters_t *prev_counters;
+    ngx_http_status_api_counters_t *counters;
+    int load_config_timestamp;
+    int nginx_load_timestamp;
+
+} ngx_http_status_api_shm_ctx;
+
+typedef struct {
     ngx_shm_zone_t *shm_zone;
 } ngx_http_status_api_loc_conf_t;
 
 
 typedef struct {
     ngx_shm_zone_t *shm_zone;
-    ngx_http_status_api_counters_t *prev_counters;
 } ngx_http_status_api_srv_conf_t;
 
 

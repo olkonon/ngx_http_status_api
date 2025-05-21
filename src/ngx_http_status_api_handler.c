@@ -6,51 +6,51 @@
 #include <ngx_http.h>
 #include <ngx_string.h>
 #include "ngx_http_status_api_module.h"
-#include "ngx_http_status_api_handler_upstreams.h"
-#include "ngx_http_status_api_handler_streams.h"
+#include "ngx_http_status_api_handler.h"
 
-static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_str_t *path);
-static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r);
-static ngx_int_t ngx_http_status_api_api_handler_nginx(ngx_http_request_t *r);
+static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_t *path);
+static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r);
+static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r);
 
 #ifdef NGX_STAT_STUB
-static ngx_int_t ngx_http_status_api_api_handler_connections(ngx_http_request_t *r);
-static ngx_int_t ngx_http_status_api_api_handler_requests(ngx_http_request_t *r);
+    static ngx_int_t ngx_http_status_api_handler_connections(ngx_http_request_t *r);
+    static ngx_int_t ngx_http_status_api_handler_requests(ngx_http_request_t *r);
 #endif
 
 #ifdef NGX_HTTP_DYNAMIC_HEALTHCHEK
-#include "ngx_http_dynamic_healthcheck.h"
-//ngx_int_t ngx_http_dynamic_healthcheck_upstream_status(ngx_http_request_t *r);
+    #include "ngx_http_dynamic_healthcheck.h"
+    #include "ngx_http_status_api_handler_upstreams.h"
+    #include "ngx_http_status_api_handler_streams.h"
 #endif
 
+static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r);
 
-static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t *r);
-
-/* Reply on location marked with api_status */
-ngx_int_t ngx_http_status_api_api_handler(ngx_http_request_t *r) {
-    ngx_str_t          type;
-
-    ngx_http_core_loc_conf_t *loc_conf;
-    ngx_str_t path;
+//+ Handle headers and simple checks
+ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r) {
+    ngx_str_t                   type;
+    ngx_http_core_loc_conf_t    *loc_conf;
+    ngx_str_t                   path;
 
     if (!(r->method & NGX_HTTP_GET)) {
+        http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler] Not GET request to API");
         return NGX_HTTP_NOT_ALLOWED;
     }
 
     loc_conf = *r->loc_conf;
     if (loc_conf == NULL) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[http-status-api] loc_conf is null");
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler] loc_conf is null");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
+
     if (r->uri.len < loc_conf->name.len) {
-        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0, "[http-status-api] very strange request_uri smaller than location name");
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler] very strange request_uri smaller than location name");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     path.data = r->uri.data+loc_conf->name.len;
     path.len = r->uri.len-loc_conf->name.len;
 
-    ngx_log_error(NGX_LOG_INFO,r->connection->log,0, "[http-status-api] request path: '%V'", &path);
+    dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler] request path: '%V'", &path);
 
     ngx_str_set(&type, "application/json");
 
@@ -58,12 +58,11 @@ ngx_int_t ngx_http_status_api_api_handler(ngx_http_request_t *r) {
     r->headers_out.content_type = type;
     r->headers_out.content_type_lowcase = NULL;
 
-    return ngx_http_status_api_api_handler_root(r, &path);
-
-
+    return ngx_http_status_api_handler_root(r, &path);
  }
 
-static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_str_t *path) {
+//+ Base URLs handler
+static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_t *path) {
     ngx_buf_t       *b;
     ngx_chain_t     out;
     ngx_int_t       rc;
@@ -74,8 +73,7 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
         return rc;
     }
     //Handele /
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "[http-status-api] path [%V] [%ui]", path,path->len);
-    ngx_log_error(NGX_LOG_INFO, r->connection->log, 0, "[http-status-api] path [%ui]", ngx_strncmp(path->data, "api",path->len));
+    dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_root] GET [%V]", path);
 
     //Dirty hack for /
     if ( path->len ==0 ) {
@@ -83,14 +81,14 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     }
     // handle /api
     if ((ngx_strncmp(path->data, "/",path->len) == 0) || (ngx_strncmp(path->data, "",path->len) == 0)) {
-        size = sizeof("[\"v1\"]")+1;
+        size = sizeof(NGX_HTTP_STATUS_API_VERSIONS_JSON)+1;
         b = ngx_create_temp_buf(r->pool, size);
 
         if (b == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
-        b->last = ngx_sprintf(b->last, "[\"v1\"]");
+        b->last = ngx_sprintf(b->last, NGX_HTTP_STATUS_API_VERSIONS_JSON);
 
         out.buf = b;
         out.next = NULL;
@@ -108,29 +106,13 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     }
 
     if ((ngx_strncmp(path->data, "/v1",path->len) == 0) || (ngx_strncmp(path->data, "/v1/",path->len) == 0)) {
-        size = sizeof("["
-                    "\"ssl\","
-                    #ifdef NGX_STAT_STUB
-                    "\"connections\","
-                    #endif
-                    "\"nginx\","
-                    "\"http\","
-                    "\"stream\""
-                    "]")+1;
+        size = sizeof(NGX_HTTP_STATUS_API_DIVISION_JSON)+1;
         b = ngx_create_temp_buf(r->pool, size);
         if (b == NULL) {
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
-        b->last = ngx_sprintf(b->last, "["
-                    "\"ssl\","
-                    #ifdef NGX_STAT_STUB
-                    "\"connections\","
-                    #endif
-                    "\"nginx\","
-                    "\"http\","
-                    "\"stream\""
-                    "]");
+        b->last = ngx_sprintf(b->last,NGX_HTTP_STATUS_API_DIVISION_JSON);
 
         out.buf = b;
         out.next = NULL;
@@ -234,23 +216,23 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
 
 
     if (ngx_strncmp(path->data, "/v1/ssl",path->len) == 0) {
-        return ngx_http_status_api_api_handler_ssl(r);
+        return ngx_http_status_api_handler_ssl(r);
     }
 
     if (ngx_strncmp(path->data, "/v1/nginx",path->len) == 0) {
-        return ngx_http_status_api_api_handler_nginx(r);
+        return ngx_http_status_api_handler_nginx(r);
     }
 
     #ifdef NGX_STAT_STUB
     if (ngx_strncmp(path->data, "/v1/connections",path->len) == 0) {
-        return ngx_http_status_api_api_handler_connections(r);
+        return ngx_http_status_api_handler_connections(r);
     }
     if (ngx_strncmp(path->data, "/v1/http/requests",path->len) == 0) {
-      return ngx_http_status_api_api_handler_requests(r);
+      return ngx_http_status_api_handler_requests(r);
     }
     #endif
     if (ngx_strncmp(path->data, "/v1/http/server_zones",path->len) == 0) {
-      return ngx_http_status_api_api_handler_server_zones(r);
+      return ngx_http_status_api_handler_server_zones(r);
     }
 
     if (ngx_strncmp(path->data, "/v1/stream/upstreams",path->len) == 0) {
@@ -272,32 +254,57 @@ static ngx_int_t ngx_http_status_api_api_handler_root(ngx_http_request_t *r,ngx_
     return NGX_HTTP_NOT_FOUND;
 }
 
-
-
-
-//handle nginx statistic
-static ngx_int_t ngx_http_status_api_api_handler_nginx(ngx_http_request_t *r) {
+//+ Handle nginx statistic
+static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
     ngx_buf_t                           *b;
     ngx_chain_t                         out;
     ngx_int_t                           rc;
-
+    int                                 reload_timestamp = 0;
+    int                                 start_timestamp = 0;
+    ngx_http_status_api_srv_conf_t      *self_main_cf;
+    ngx_http_status_api_shm_ctx         *ctx;
     struct timeval   tv;
 
+    //Get data to response
+    ngx_gettimeofday(&tv);
+
+    self_main_cf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);
+    if (self_main_cf == NULL || self_main_cf->shm_zone==NULL) {
+        http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx] Get default SHM error, pointer is NULL");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx] Get default SHM success");
+
+    ctx = self_main_cf->shm_zone->data;
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex");
+    ngx_shmtx_lock(&ctx->shpool->mutex);
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex success");
+
+    reload_timestamp = ctx->load_config_timestamp;
+    start_timestamp = ctx->nginx_load_timestamp;
+
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex");
+    ngx_shmtx_unlock(&ctx->shpool->mutex);
+    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex success");
+
+    // Response generate
     b = ngx_create_temp_buf(r->pool, 65535);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-
-    ngx_gettimeofday(&tv);
-
     out.buf = b;
     out.next = NULL;
-    b->last = ngx_sprintf(b->last,"{\"version\": \"%s\",",NGINX_VERSION);
-    b->last = ngx_sprintf(b->last,"\"build\": \"%s\",",NGX_BUILD);
-    b->last = ngx_sprintf(b->last,"\"hostname\": \"%V\",",&ngx_cycle->hostname);
-    b->last = ngx_sprintf(b->last,"\"timestmap\": %ui,",tv.tv_sec);
-    b->last = ngx_sprintf(b->last,"\"load_timestamp\": %ui}",*get_config_load_time());
+
+    b->last = ngx_sprintf(b->last,NGX_HTTP_STATUS_API_NGINX_INFO_JSON,
+        NGINX_VERSION,
+        NGX_BUILD,
+        &ngx_cycle->hostname,
+        tv.tv_sec,
+        start_timestamp,
+        reload_timestamp);
+
 
     r->headers_out.status = NGX_HTTP_OK;
     r->headers_out.content_length_n = b->last - b->pos;
@@ -314,9 +321,94 @@ static ngx_int_t ngx_http_status_api_api_handler_nginx(ngx_http_request_t *r) {
     return ngx_http_output_filter(r, &out);
 }
 
+#ifdef NGX_STAT_STUB
+//+ Handle nginx connections statistic
+static ngx_int_t ngx_http_status_api_handler_connections (ngx_http_request_t *r) {
+    ngx_buf_t                           *b;
+    ngx_chain_t                         out;
+    ngx_int_t                           rc;
+    ngx_atomic_int_t                    conn_accepted,conn_dropped,conn_handled,conn_active,conn_idle,conn_reading,conn_writing;
+
+    b = ngx_create_temp_buf(r->pool, 8192);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    out.buf = b;
+    out.next = NULL;
+
+    conn_accepted = *ngx_stat_accepted;
+    conn_handled = *ngx_stat_handled;
+    conn_dropped = conn_accepted - conn_handled;
+    conn_active = *ngx_stat_active;
+    conn_reading = *ngx_stat_reading;
+    conn_writing = *ngx_stat_writing;
+    conn_idle = conn_active - (conn_reading +  conn_writing);
+
+    b->last = ngx_sprintf(b->last,NGX_HTTP_STATUS_API_CONNECTION_JSON,
+        conn_accepted,
+        conn_dropped,
+        conn_active,
+        conn_idle);
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = b->last - b->pos;
+
+    b->last_buf = (r == r->main) ? 1 : 0;
+    b->last_in_chain = 1;
+
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    return ngx_http_output_filter(r, &out);
+}
+
+//+ Handle nginx requests statistic
+static ngx_int_t ngx_http_status_api_handler_requests (ngx_http_request_t *r) {
+    ngx_buf_t                           *b;
+    ngx_chain_t                         out;
+    ngx_int_t                           rc;
+    ngx_atomic_int_t                    requests,conn_reading,conn_writing;
+
+    b = ngx_create_temp_buf(r->pool, 8192);
+    if (b == NULL) {
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    out.buf = b;
+    out.next = NULL;
+
+    conn_reading = *ngx_stat_reading;
+    conn_writing = *ngx_stat_writing;
+	requests = *ngx_stat_requests;
+
+    b->last = ngx_sprintf(b->last,NGX_HTTP_STATUS_API_REQUESTS_JSON,
+        requests,
+        conn_reading+conn_writing);
+
+    r->headers_out.status = NGX_HTTP_OK;
+    r->headers_out.content_length_n = b->last - b->pos;
+
+    b->last_buf = (r == r->main) ? 1 : 0;
+    b->last_in_chain = 1;
+
+    rc = ngx_http_send_header(r);
+
+    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
+        return rc;
+    }
+
+    return ngx_http_output_filter(r, &out);
+}
+#endif
+
+
 
 //handle server_zones statistic
-static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t *r) {
+static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r) {
     ngx_uint_t                          i,num;
     ngx_http_status_api_counters_t      *counters;
     ngx_buf_t                           *b;
@@ -435,9 +527,8 @@ static ngx_int_t ngx_http_status_api_api_handler_server_zones(ngx_http_request_t
     return ngx_http_output_filter(r, &out);
 }
 
-
 //handle SSL statistic
-static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
+static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
     ngx_uint_t                          i,num;
     ngx_http_status_api_counters_t      *counters;
     ngx_buf_t                           *b;
@@ -457,12 +548,12 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
     cmcf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);
     hsamcf = (ngx_http_status_api_srv_conf_t *) cmcf;
     if (hsamcf!= NULL && hsamcf->shm_zone != NULL && hsamcf->shm_zone->shm.addr != NULL) {
-      		dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Get stat from default status_zone");
+      		dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Get stat from default status_zone");
             shpool = (ngx_slab_pool_t *) hsamcf->shm_zone->shm.addr;
             if (shpool != NULL)  {
-            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Try lock mutex for shpool.");
+            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Try lock mutex for shpool.");
             	ngx_shmtx_lock(&shpool->mutex);//Mutex
-            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Mutex lock SUCCESS.");
+            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Mutex lock SUCCESS.");
 
             	counters = hsamcf->shm_zone->data;
                 if (counters!=NULL) {
@@ -473,14 +564,14 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
                 	handshake_timeout += counters->ssl_timeouts;
 
          		} else {
-              		dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][default] counters is NULL");
+              		dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][default] counters is NULL");
             	}
-                dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Try unlock mutex for shpool.");
+                dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Try unlock mutex for shpool.");
             	ngx_shmtx_unlock(&shpool->mutex);//Mutex
-            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Mutex unlock SUCCESS.");
+            	dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Mutex unlock SUCCESS.");
 
             } else {
-      			dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][default] Var is NULL shpool.");
+      			dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][default] Var is NULL shpool.");
             }
     }
 
@@ -499,14 +590,14 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
         if (sslscf->shm_zone != NULL  && sslscf->shm_zone->shm.addr != NULL) {
             shpool = (ngx_slab_pool_t *) sslscf->shm_zone->shm.addr;
             if (shpool == NULL) {
-                dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Var is NULL shpool.",i);
+                dbg_http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_ssl][%i] Var is NULL shpool.",i);
                 continue;
             }
             counters = sslscf->shm_zone->data;
             if (counters!=NULL) {
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Try lock mutex for shpool.",i);
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try lock mutex for shpool.",i);
                 ngx_shmtx_lock(&shpool->mutex);//Mutex
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Mutex lock SUCCESS.",i);
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Mutex lock SUCCESS.",i);
 
 
                 handshakes += counters->ssl_accept;
@@ -514,13 +605,13 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
                 session_reuses +=  counters->ssl_hits;
                 handshake_timeout += counters->ssl_timeouts;
 
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Try unlock mutex for shpool.",i);
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try unlock mutex for shpool.",i);
                 ngx_shmtx_unlock(&shpool->mutex);//Mutex
-                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] Mutex unllock SUCCESS.",i);
+                dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Mutex unllock SUCCESS.",i);
 
 
             } else {
-              	dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_api_handler_ssl][%i] counters is NULL found",i);
+              	dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] counters is NULL found",i);
             }
         }
     }
@@ -554,93 +645,7 @@ static ngx_int_t ngx_http_status_api_api_handler_ssl(ngx_http_request_t *r) {
 }
 
 
-#ifdef NGX_STAT_STUB
-//handle nginx connections statistic
-static ngx_int_t ngx_http_status_api_api_handler_connections (ngx_http_request_t *r) {
-    ngx_buf_t                           *b;
-    ngx_chain_t                         out;
-    ngx_int_t                           rc;
-    ngx_atomic_int_t                    conn_accepted,conn_dropped,conn_handled,conn_active,conn_idle,conn_reading,conn_writing;
 
-    b = ngx_create_temp_buf(r->pool, 65535);
-    if (b == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    out.buf = b;
-    out.next = NULL;
-
-    conn_accepted = *ngx_stat_accepted;
-    conn_handled = *ngx_stat_handled;
-    conn_dropped = conn_accepted - conn_handled;
-    conn_active = *ngx_stat_active;
-    conn_reading = *ngx_stat_reading;
-    conn_writing = *ngx_stat_writing;
-    conn_idle = conn_active - (conn_reading +  conn_writing);
-
-
-
-
-    b->last = ngx_sprintf(b->last,"{\"accepted\": %ui,", conn_accepted);
-    b->last = ngx_sprintf(b->last,"\"dropped\": %ui,", conn_dropped);
-    b->last = ngx_sprintf(b->last,"\"active\": %ui,",conn_active);
-    b->last = ngx_sprintf(b->last,"\"idle\": %ui}",conn_idle);
-
-    r->headers_out.status = NGX_HTTP_OK;
-    r->headers_out.content_length_n = b->last - b->pos;
-
-    b->last_buf = (r == r->main) ? 1 : 0;
-    b->last_in_chain = 1;
-
-    rc = ngx_http_send_header(r);
-
-    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-        return rc;
-    }
-
-    return ngx_http_output_filter(r, &out);
-}
-
-//handle nginx requests statistic
-static ngx_int_t ngx_http_status_api_api_handler_requests (ngx_http_request_t *r) {
-    ngx_buf_t                           *b;
-    ngx_chain_t                         out;
-    ngx_int_t                           rc;
-    ngx_atomic_int_t                    requests,conn_reading,conn_writing;
-
-    b = ngx_create_temp_buf(r->pool, 65535);
-    if (b == NULL) {
-        return NGX_HTTP_INTERNAL_SERVER_ERROR;
-    }
-
-    out.buf = b;
-    out.next = NULL;
-
-    conn_reading = *ngx_stat_reading;
-    conn_writing = *ngx_stat_writing;
-	requests = *ngx_stat_requests;
-
-
-    b->last = ngx_sprintf(b->last,"{"
-			"\"total\": %uA,"
-			"\"current\": %uA"
-                                  "}",requests,conn_reading+conn_writing);
-
-    r->headers_out.status = NGX_HTTP_OK;
-    r->headers_out.content_length_n = b->last - b->pos;
-
-    b->last_buf = (r == r->main) ? 1 : 0;
-    b->last_in_chain = 1;
-
-    rc = ngx_http_send_header(r);
-
-    if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
-        return rc;
-    }
-
-    return ngx_http_output_filter(r, &out);
-}
-#endif
 
 
 
