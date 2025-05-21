@@ -60,5 +60,25 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
         "\"handshake_timeout\":%ui"     \
     "}"
 
+#define NGX_HTTP_STATUS_API_SERVER_ZONE_JSON    \
+    "\"%s\":{"                                  \
+        "\"ssl\":{"                             \
+            "\"handshakes\":%ui,"                 \
+            "\"session_reuses\":%ui,"           \
+            "\"handshakes_failed\":%ui,"        \
+            "\"handshake_timeout\":%ui"         \
+        "},"                                    \
+        "\"responses\":{"                       \
+            "\"total\": %ui,"                   \
+            "\"1xx\": %ui,"                     \
+            "\"2xx\": %ui,"                     \
+            "\"3xx\": %ui,"                     \
+            "\"4xx\": %ui,"                     \
+            "\"5xx\": %ui"                      \
+        "},"                                    \
+        "\"received\": %ui,"                    \
+        "\"sent\": %ui"                         \
+    "}"
+
 
 #endif //NGX_HTTP_STATUS_API_API_HANDLER_H
