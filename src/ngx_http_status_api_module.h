@@ -54,6 +54,7 @@ typedef struct {
 
 typedef struct {
     ngx_slab_pool_t *shpool;
+    ngx_str_t  *name;
     ngx_http_status_api_counters_t *prev_counters;
     ngx_http_status_api_counters_t *counters;
     int load_config_timestamp;

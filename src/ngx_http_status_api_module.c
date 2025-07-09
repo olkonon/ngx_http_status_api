@@ -83,6 +83,7 @@ ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
     if (old_ctx) {
         ctx->counters = old_ctx->counters;
         ctx->shpool = old_ctx->shpool;
+        ctx->name = old_ctx->name;
         //ssl ctx counters reset when reload
         ctx->prev_counters = ngx_slab_alloc(ctx->shpool, sizeof(ngx_http_status_api_counters_t));
         if (ctx->prev_counters == NULL) {
@@ -115,31 +116,55 @@ ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
 
 //+ Get or create SHM zone with name
 static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
-    ngx_shm_zone_t                    *shm_zone;
+    ngx_shm_zone_t                 *shm_zone;
+    ngx_str_t               *shm_name_prefix;
+    ngx_str_t                      *shm_name;
     ngx_http_status_api_shm_ctx         *ctx;
-	dbg_http_status_api_conf_log_info(cf, "[http-status-api][get_or_create_shm_zone][%V] Start init zone.", name);
+
+
+	http_status_api_conf_log_info(cf, "[http-status-api][get_or_create_shm_zone][%V] Start init zone.", name);
 
     ctx = ngx_pcalloc(cf->pool, sizeof(ngx_http_status_api_shm_ctx));
     if (ctx == NULL) {
-        http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Error creating ngx_http_status_api_shm_ctx", name);
+        dbg_http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Error creating ngx_http_status_api_shm_ctx", name);
         return NULL;
     }
+
+    ctx->name = ngx_palloc(cf->pool,sizeof(ngx_str_t));
+    ctx->name->len = name->len;
+    ctx->name->data = ngx_palloc(cf->pool,sizeof(u_char)*name->len);
+    ngx_snprintf( ctx->name->data,  ctx->name->len, "%V", name);
+
     dbg_http_status_api_conf_log_info(cf, "[http-status-api][get_or_create_shm_zone][%V] ngx_http_status_api_shm_ctx create success.", name);
 
+
+    //Init prefix for shm status_zone
+    shm_name_prefix = ngx_palloc(cf->pool,sizeof(ngx_str_t));
+    ngx_str_set(shm_name_prefix,"http-status-api-");
+
+    //Init real name of shm
+    shm_name = ngx_pcalloc(cf->pool,sizeof(ngx_str_t));
+    if (shm_name == NULL) {
+        dbg_http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Can't allocate mem for zone creating.", name);
+        return NULL;
+    }
+
+    shm_name->len = shm_name_prefix->len + name->len + 1;
+    shm_name->data = ngx_pcalloc(cf->pool,sizeof(u_char)*shm_name->len);
+    ngx_snprintf(shm_name->data, shm_name->len, "%V%V", shm_name_prefix, name);
+    ngx_pfree(cf->pool,shm_name_prefix);
+
     //Create SHM
-	shm_zone = ngx_shared_memory_add(cf, name, SHM_SIZE,&ngx_http_status_api_module);
+	shm_zone = ngx_shared_memory_add(cf, shm_name, SHM_SIZE,&ngx_http_status_api_module);
     if (shm_zone == NULL) {
     	http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Error creating shm-zone", name);
         return NULL;
     }
     if (shm_zone->data) {
-        ctx = shm_zone->data;
-        ngx_conf_log_error(NGX_LOG_EMERG, cf, 0,
-                               "[http-status-api][get_or_create_shm_zone][%V] Already bound",
-                               name);
-        return NULL;
+        dbg_http_status_api_conf_log_info(cf,"[http-status-api][get_or_create_shm_zone][%V] Reusing zone.", name);
+        return shm_zone;
     }
-    shm_zone->noreuse=0;
+
     shm_zone->init = ngx_http_status_api_init_zone;
     shm_zone->data = ctx;
 

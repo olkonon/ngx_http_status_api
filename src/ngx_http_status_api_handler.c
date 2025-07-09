@@ -536,7 +536,7 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
 
         dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%s] Stat from zones get success",server_conf->shm_zone->shm.name.data);
         b->last = ngx_sprintf(b->last, NGX_HTTP_STATUS_API_SERVER_ZONE_JSON,
-            server_conf->shm_zone->shm.name.data,
+            ctx->name,
             ctx->counters->ssl_accept,
             ctx->counters->ssl_hits,
             ctx->counters->ssl_accept - ctx->counters->ssl_accept_good,
