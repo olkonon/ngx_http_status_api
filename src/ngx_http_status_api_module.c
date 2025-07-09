@@ -12,7 +12,6 @@
 
 static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
 static ngx_int_t ngx_http_status_api_server_zone_counter(ngx_http_request_t *r);
-static void *ngx_http_status_api_create_main_conf(ngx_conf_t *cf);
 static void *ngx_http_status_api_create_srv_conf(ngx_conf_t *cf);
 static void *ngx_http_status_api_create_loc_conf(ngx_conf_t *cf);
 static ngx_int_t ngx_http_status_api_module_init_worker(ngx_cycle_t *cycle);
@@ -20,7 +19,6 @@ static char *ngx_http_status_api(ngx_conf_t *cf, ngx_command_t *cmd,
         void *conf);
 static char *ngx_http_status_api_zone(ngx_conf_t *cf, ngx_command_t *cmd,
         void *conf);
-
 //+ Timer event for periodic stat polling
 static ngx_event_t ngx_http_status_api_timer;
 
@@ -48,7 +46,7 @@ static ngx_http_module_t  ngx_http_status_api_module_ctx = {
     NULL,                                  /* preconfiguration */
     NULL,                                  /* postconfiguration */
 
-    ngx_http_status_api_create_main_conf,  /* create main configuration */
+    NULL,  /* create main configuration */
     NULL,    							   /* init main configuration */
 
 
@@ -84,20 +82,15 @@ ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
 
     if (old_ctx) {
         ctx->counters = old_ctx->counters;
-
+        ctx->shpool = old_ctx->shpool;
         //ssl ctx counters reset when reload
         ctx->prev_counters = ngx_slab_alloc(ctx->shpool, sizeof(ngx_http_status_api_counters_t));
         if (ctx->prev_counters == NULL) {
             return NGX_ERROR;
         }
-
-        ctx->shpool = old_ctx->shpool;
-
         ngx_gettimeofday(&tv);
-
         ctx->nginx_load_timestamp = old_ctx->nginx_load_timestamp;
         ctx->load_config_timestamp = tv.tv_sec;
-
         return NGX_OK;
     }
 
@@ -116,7 +109,7 @@ ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
     ctx->nginx_load_timestamp = tv.tv_sec;
     ctx->load_config_timestamp = tv.tv_sec;
 
-    ctx->shpool->log_nomem = 0;
+  //  ctx->shpool->log_nomem = 0;
     return NGX_OK;
 }
 
@@ -146,6 +139,7 @@ static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
                                name);
         return NULL;
     }
+    shm_zone->noreuse=0;
     shm_zone->init = ngx_http_status_api_init_zone;
     shm_zone->data = ctx;
 
@@ -176,7 +170,6 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
 
     ngx_cycle_t                     *cycle = ev->data;
     ngx_http_core_main_conf_t       *core_main_conf;
-    ngx_http_ssl_srv_conf_t         *module_main_conf;
     ngx_uint_t				        num_servers,i,counter_val;
     ngx_http_core_srv_conf_t        **servers_conf_list;
     ngx_http_ssl_srv_conf_t         *ssl_conf;
@@ -184,7 +177,6 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
     ngx_http_status_api_shm_ctx     *ctx;
 
     core_main_conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_core_module);
-    module_main_conf = ngx_http_cycle_get_module_main_conf(cycle, ngx_http_status_api_module);
     servers_conf_list = core_main_conf->servers.elts; // get all servers conf in current worker
     num_servers = core_main_conf->servers.nelts;  // get all servers count in current worker
     //Get conigs
@@ -205,14 +197,18 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
           dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Server hasn't ssl context http server only",i);
           continue;
         }
+
+        if (server_conf->shm_zone == NULL) {
+            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Server hasn't status_zone directive",i);
+            continue;
+        }
+
 	    //SSL only server
         // if status_zone defined & enabled
-        if (server_conf->shm_zone != NULL ) {
-            dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to server specific status_zone",i);
-            ctx = server_conf->shm_zone->data;
-        } else {
-      		dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Write stat to default status_zone",i);
-            ctx = module_main_conf->shm_zone->data;
+        ctx = server_conf->shm_zone->data;
+        if (!ctx) {
+             dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] ctx is NULL ", i);
+             continue;
         }
 
         dbg_http_status_api_log_info(ev->log,"[http-status-api][ngx_http_status_api_poll_stat][%i] Try lock mutex for SHM", i);
@@ -251,26 +247,6 @@ ngx_http_status_api_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
 
     dbg_http_status_api_conf_log_info(cf, "[http-status-api][ngx_http_status_api_zone][%V] Create srv_cf->shm_zone success",zone_name);
     return NGX_CONF_OK;
-}
-
-//Create main http module config and init default shm status_zone
-static void *ngx_http_status_api_create_main_conf(ngx_conf_t *cf) {
-    ngx_http_status_api_srv_conf_t   *conf;
-    ngx_str_t                        default_zone_name = ngx_string(SHM_DEFAULT_NAME);
-
-    dbg_http_status_api_conf_log_info(cf,"[ngx_http_status_api_create_main_conf][%V] Init status zone from configuration",&default_zone_name);
-
-    conf = ngx_palloc(cf->pool, sizeof(ngx_http_status_api_srv_conf_t));
-    dbg_http_status_api_conf_log_info(cf,"[http-status-api][ngx_http_status_api_create_main_conf][%V] new conf allocation success",&default_zone_name);
-
-    conf->shm_zone = get_or_create_shm_zone(cf, &default_zone_name);
-	if (conf->shm_zone == NULL) {
-          dbg_http_status_api_conf_log_info(cf,"[http-status-api][ngx_http_status_api_create_main_conf][%V] conf->shm_zone is NULL reinit",&default_zone_name);
-          return NULL;
-	}
-
-	dbg_http_status_api_conf_log_info(cf, "[http-status-api][ngx_http_status_api_create_main_conf][%V] Init status zone from configuration SUCCESS!",&default_zone_name);
-    return conf;
 }
 
 //Create module server configs
@@ -368,25 +344,21 @@ static ngx_int_t ngx_http_status_api_server_zone_counter(ngx_http_request_t *r) 
 
     ngx_http_status_api_shm_ctx     *ctx;
     ngx_http_status_api_srv_conf_t  *server_conf;
-    ngx_http_status_api_srv_conf_t  *self_main_conf;
     ngx_uint_t                      in_bytes,out_bytes;
     ngx_int_t                       status;
 
     server_conf = ngx_http_get_module_srv_conf(r, ngx_http_status_api_module);
-    self_main_conf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);;
 
     in_bytes = get_in_request_body_size(r);
     out_bytes = get_out_request_body_size(r);
     status = r->headers_out.status;
 
-
-    if (server_conf->shm_zone != NULL) {
-        dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter][%s] Write response stat to zone",server_conf->shm_zone->shm.name.data);
-        ctx = server_conf->shm_zone->data;
-    } else {
-        dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter][%s] Write response stat to zone",self_main_conf->shm_zone->shm.name.data);
-        ctx =  self_main_conf->shm_zone->data;
+    if (server_conf->shm_zone == NULL) {
+        dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] No status_zone ignore request");
+        return ngx_http_next_header_filter(r);
     }
+
+    ctx = server_conf->shm_zone->data;
 
     dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] Try lock mutex for SHM.");
     ngx_shmtx_lock(&ctx->shpool->mutex);//Mutex

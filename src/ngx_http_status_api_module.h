@@ -11,7 +11,6 @@
 
 
 #define SHM_SIZE 2*ngx_pagesize
-#define SHM_DEFAULT_NAME "default"
 #define STAT_POLL_INTERVAL 1000
 
 

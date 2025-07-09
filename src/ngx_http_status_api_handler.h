@@ -34,7 +34,7 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
         "\"hostname\": \"%V\","             \
         "\"timestmap\": %ui,"               \
         "\"start_timestamp\": %ui,"         \
-        "\"reload_timestamp\": %ui,"        \
+        "\"reload_timestamp\": %ui,"   NGX_HTTP_STATUS_API_SERVER_ZONE_JSON     \
     "}"
 
 #ifdef NGX_STAT_STUB
