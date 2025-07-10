@@ -10,17 +10,17 @@
 #include "ngx_http_status_api_module.h"
 #include "ngx_http_status_api_handler.h"
 
-static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
+//static ngx_http_output_header_filter_pt ngx_http_next_header_filter;
 static ngx_int_t ngx_http_status_api_server_zone_counter(ngx_http_request_t *r);
 static void *ngx_http_status_api_create_srv_conf(ngx_conf_t *cf);
 static void *ngx_http_status_api_create_loc_conf(ngx_conf_t *cf);
-static ngx_int_t ngx_http_status_api_module_init_worker(ngx_cycle_t *cycle);
+static ngx_int_t ngx_http_status_api_module_init_worker(ngx_conf_t *cf);
 static char *ngx_http_status_api(ngx_conf_t *cf, ngx_command_t *cmd,
         void *conf);
 static char *ngx_http_status_api_zone(ngx_conf_t *cf, ngx_command_t *cmd,
         void *conf);
 //+ Timer event for periodic stat polling
-static ngx_event_t ngx_http_status_api_timer;
+//static ngx_event_t ngx_http_status_api_timer;
 
 static ngx_command_t  ngx_http_status_api_module_commands[] = {
 
@@ -44,7 +44,7 @@ static ngx_command_t  ngx_http_status_api_module_commands[] = {
 
 static ngx_http_module_t  ngx_http_status_api_module_ctx = {
     NULL,                                  /* preconfiguration */
-    NULL,                                  /* postconfiguration */
+    ngx_http_status_api_module_init_worker, /* postconfiguration */
 
     NULL,  /* create main configuration */
     NULL,    							   /* init main configuration */
@@ -65,7 +65,7 @@ ngx_module_t  ngx_http_status_api_module = {
     NGX_HTTP_MODULE,                         /* module type */
     NULL,                                    /* init master */
     NULL,                                    /* init module */
-    ngx_http_status_api_module_init_worker,  /* init process */
+    NULL,  /* init process */
     NULL,                                    /* init thread */
     NULL,                                    /* exit thread */
     NULL,                                    /* exit process */
@@ -77,40 +77,40 @@ ngx_module_t  ngx_http_status_api_module = {
 static ngx_int_t
 ngx_http_status_api_init_zone(ngx_shm_zone_t *shm_zone, void *data) {
     struct timeval                  tv;
-    ngx_http_status_api_shm_ctx     *old_ctx=data;
-    ngx_http_status_api_shm_ctx     *ctx=shm_zone->data;
+    ngx_http_status_api_shm_ctx     *octx=data;
+    ngx_http_status_api_shm_ctx     *ctx;
 
-    if (old_ctx) {
-        ctx->counters = old_ctx->counters;
-        ctx->shpool = old_ctx->shpool;
-        ctx->name = old_ctx->name;
-        //ssl ctx counters reset when reload
-        ctx->prev_counters = ngx_slab_alloc(ctx->shpool, sizeof(ngx_http_status_api_counters_t));
-        if (ctx->prev_counters == NULL) {
-            return NGX_ERROR;
-        }
+    ctx = shm_zone->data;
+
+    if (octx) {
+        ctx->counters = octx->counters;
+        ctx->shpool = octx->shpool;
         ngx_gettimeofday(&tv);
-        ctx->nginx_load_timestamp = old_ctx->nginx_load_timestamp;
-        ctx->load_config_timestamp = tv.tv_sec;
+
+        ctx->counters->load_config_timestamp = tv.tv_sec;
+        ctx->counters->prev_ssl_accept=0;
+        ctx->counters->prev_ssl_accept_good=0;
+        ctx->counters->prev_ssl_hits=0;
+        ctx->counters->prev_ssl_timeouts=0;
+
         return NGX_OK;
     }
 
     ctx->shpool = (ngx_slab_pool_t *) shm_zone->shm.addr;
+    if (shm_zone->shm.exists) {
+        ctx->counters = ctx->shpool->data;
+        return NGX_OK;
+    }
 
     ctx->counters = ngx_slab_alloc(ctx->shpool, sizeof(ngx_http_status_api_counters_t));
     if (ctx->counters == NULL) {
         return NGX_ERROR;
     }
-    ctx->prev_counters = ngx_slab_alloc(ctx->shpool, sizeof(ngx_http_status_api_counters_t));
-    if (ctx->prev_counters == NULL) {
-        return NGX_ERROR;
-    }
-
+    ctx->shpool->data = ctx->counters;
+    
     ngx_gettimeofday(&tv);
-    ctx->nginx_load_timestamp = tv.tv_sec;
-    ctx->load_config_timestamp = tv.tv_sec;
-
-  //  ctx->shpool->log_nomem = 0;
+    ctx->counters->nginx_load_timestamp = tv.tv_sec;
+    ctx->counters->load_config_timestamp = tv.tv_sec;
     return NGX_OK;
 }
 
@@ -130,17 +130,14 @@ static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
         return NULL;
     }
 
-    ctx->name = ngx_palloc(cf->pool,sizeof(ngx_str_t));
-    ctx->name->len = name->len;
-    ctx->name->data = ngx_palloc(cf->pool,sizeof(u_char)*name->len);
-    ngx_snprintf( ctx->name->data,  ctx->name->len, "%V", name);
+
 
     dbg_http_status_api_conf_log_info(cf, "[http-status-api][get_or_create_shm_zone][%V] ngx_http_status_api_shm_ctx create success.", name);
 
 
     //Init prefix for shm status_zone
     shm_name_prefix = ngx_palloc(cf->pool,sizeof(ngx_str_t));
-    ngx_str_set(shm_name_prefix,"http-status-api-");
+    ngx_str_set(shm_name_prefix,SHM_ZONE_PREFIX);
 
     //Init real name of shm
     shm_name = ngx_pcalloc(cf->pool,sizeof(ngx_str_t));
@@ -184,7 +181,7 @@ ngx_http_status_api(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
 /*+ Poll SSL stat timer callback
 This will be called by timer to append openssl stat values of current worker
 process to counters in shm */
-static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
+/*static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
     // add only delta (current - previous) to counter in shm
     // remember last (current) value for feature calls
     #define ngx_http_status_api_add_ssl_counter_delta(counter, openssl_func) \
@@ -252,7 +249,7 @@ static void ngx_http_status_api_poll_stat(ngx_event_t *ev) {
 
     ngx_add_timer(ev, STAT_POLL_INTERVAL);
 }
-
+*/
 // Server configuration, status_zone directive
 static char *
 ngx_http_status_api_zone(ngx_conf_t *cf, ngx_command_t *cmd, void *conf) {
@@ -292,17 +289,28 @@ static void *ngx_http_status_api_create_loc_conf(ngx_conf_t *cf) {
 }
 
 //+ When a worker has started: run periodic task to poll openssl stats
-static ngx_int_t ngx_http_status_api_module_init_worker(ngx_cycle_t *cycle) {
+static ngx_int_t ngx_http_status_api_module_init_worker(ngx_conf_t *cf) {
+    ngx_http_handler_pt        *h;
+    ngx_http_core_main_conf_t  *cmcf;
     //Add poll ssl stat timer
-    ngx_http_status_api_timer.handler = ngx_http_status_api_poll_stat;
+  /*  ngx_http_status_api_timer.handler = ngx_http_status_api_poll_stat;
     ngx_http_status_api_timer.log = cycle->log;
     ngx_http_status_api_timer.data = cycle; // attach ngx_cycle_t struct to access to statistic shm
     ngx_http_status_api_timer.cancelable = 1;// allows workers shutting down gracefully
 	ngx_add_timer(&ngx_http_status_api_timer, STAT_POLL_INTERVAL);
-
+*/
     //Add top filter for aggregate response statistic
-    ngx_http_next_header_filter = ngx_http_top_header_filter;
-    ngx_http_top_header_filter = ngx_http_status_api_server_zone_counter;
+    cmcf = ngx_http_conf_get_module_main_conf(cf, ngx_http_core_module);
+
+    h = ngx_array_push(&cmcf->phases[NGX_HTTP_LOG_PHASE].handlers);
+    if (h == NULL) {
+        return NGX_ERROR;
+    }
+
+    *h = ngx_http_status_api_server_zone_counter;
+
+    //ngx_http_next_header_filter = ngx_http_top_header_filter;
+    //ngx_http_top_header_filter = ngx_http_status_api_server_zone_counter;
     return NGX_OK;
 }
 
@@ -380,7 +388,7 @@ static ngx_int_t ngx_http_status_api_server_zone_counter(ngx_http_request_t *r) 
 
     if (server_conf->shm_zone == NULL) {
         dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] No status_zone ignore request");
-        return ngx_http_next_header_filter(r);
+        return NGX_OK;
     }
 
     ctx = server_conf->shm_zone->data;
@@ -409,5 +417,5 @@ static ngx_int_t ngx_http_status_api_server_zone_counter(ngx_http_request_t *r) 
     ngx_shmtx_unlock(&ctx->shpool->mutex);//Mutex
     dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_server_zone_counter] Mutex unlock success.");
 
-    return ngx_http_next_header_filter(r);
+    return NGX_OK;
 }

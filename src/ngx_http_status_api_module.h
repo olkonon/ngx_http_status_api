@@ -9,7 +9,9 @@
 #include <ngx_core.h>
 #include <ngx_http.h>
 
-
+#define SHM_ZONE_PREFIX "http-status-api-"
+//#define SHM_ZONE_PREFIX_LEN 16 // len in bytes of string SHM_ZONE_PREFIX
+#define SHM_ZONE_PREFIX_LEN sizeof(SHM_ZONE_PREFIX)-1
 #define SHM_SIZE 2*ngx_pagesize
 #define STAT_POLL_INTERVAL 1000
 
@@ -38,28 +40,30 @@
 int *get_config_load_time();
 
 typedef struct {
-    ngx_uint_t ssl_accept;
-    ngx_uint_t ssl_accept_good;
-    ngx_uint_t ssl_hits;
-    ngx_uint_t ssl_timeouts;
-    ngx_uint_t resp_total;
-    ngx_uint_t resp_1xx;
-    ngx_uint_t resp_2xx;
-    ngx_uint_t resp_3xx;
-    ngx_uint_t resp_4xx;
-    ngx_uint_t resp_5xx;
-    ngx_uint_t in_bytes;
-    ngx_uint_t out_bytes;
+    ngx_uint_t  ssl_accept;
+    ngx_uint_t  ssl_accept_good;
+    ngx_uint_t  ssl_hits;
+    ngx_uint_t  ssl_timeouts;
+    ngx_uint_t  prev_ssl_accept;
+    ngx_uint_t  prev_ssl_accept_good;
+    ngx_uint_t  prev_ssl_hits;
+    ngx_uint_t  prev_ssl_timeouts;
+    ngx_uint_t  resp_total;
+    ngx_uint_t  resp_1xx;
+    ngx_uint_t  resp_2xx;
+    ngx_uint_t  resp_3xx;
+    ngx_uint_t  resp_4xx;
+    ngx_uint_t  resp_5xx;
+    ngx_uint_t  in_bytes;
+    ngx_uint_t  out_bytes;
+    int         load_config_timestamp;
+    int         nginx_load_timestamp;
+
 } ngx_http_status_api_counters_t;
 
 typedef struct {
     ngx_slab_pool_t *shpool;
-    ngx_str_t  *name;
-    ngx_http_status_api_counters_t *prev_counters;
     ngx_http_status_api_counters_t *counters;
-    int load_config_timestamp;
-    int nginx_load_timestamp;
-
 } ngx_http_status_api_shm_ctx;
 
 typedef struct {

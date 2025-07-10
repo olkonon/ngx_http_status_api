@@ -281,8 +281,8 @@ static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
     ngx_shmtx_lock(&ctx->shpool->mutex);
     dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex success");
 
-    reload_timestamp = ctx->load_config_timestamp;
-    start_timestamp = ctx->nginx_load_timestamp;
+    reload_timestamp = ctx->counters->load_config_timestamp;
+    start_timestamp = ctx->counters->nginx_load_timestamp;
 
     dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex");
     ngx_shmtx_unlock(&ctx->shpool->mutex);
@@ -437,7 +437,7 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
     for (i = 0; i < servers_num ; i++) {
        	server_conf = servers_conf_list[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
 
-        if (server_conf->shm_zone != NULL && server_conf->shm_zone->data) {
+        if (server_conf !=NULL && server_conf->shm_zone != NULL && server_conf->shm_zone->data!=NULL) {
             ctx = server_conf->shm_zone->data;
 
             dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try lock mutex for SHM.",i);
@@ -500,12 +500,6 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
     ngx_chain_t                         out;
     ngx_int_t                           rc;
 
-    // get core main conf
-    core_main_conf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
-    // get all servers in current worker
-    servers_conf_list = core_main_conf->servers.elts;
-    servers_num = core_main_conf->servers.nelts;
-
     //Generate response
     b = ngx_create_temp_buf(r->pool, 1024*(servers_num+1));
     if (b == NULL) {
@@ -517,15 +511,23 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
 
     b->last = ngx_sprintf(b->last, "{");
 
+
+    // get core main conf
+    core_main_conf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    // get all servers in current worker
+    servers_conf_list = core_main_conf->servers.elts;
+    servers_num = core_main_conf->servers.nelts;
+
     for (i = 0; i < servers_num; i++) {
         // this module config
         server_conf = servers_conf_list[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
-        if (server_conf->shm_zone == NULL) {
-            //Skip server without status_zone
-            continue;
-        }
+        if (server_conf == NULL) { continue; }
+        if (server_conf->shm_zone == NULL) { continue; }
 
         ctx = server_conf->shm_zone->data;
+
+        if (ctx == NULL) { continue; }
+
         if (i > 0) {
             b->last = ngx_sprintf(b->last, ",");
         }
@@ -535,8 +537,9 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
         dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Mutex lock success.",i);
 
         dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%s] Stat from zones get success",server_conf->shm_zone->shm.name.data);
+
         b->last = ngx_sprintf(b->last, NGX_HTTP_STATUS_API_SERVER_ZONE_JSON,
-            ctx->name,
+            server_conf->shm_zone->shm.name.data+SHM_ZONE_PREFIX_LEN,
             ctx->counters->ssl_accept,
             ctx->counters->ssl_hits,
             ctx->counters->ssl_accept - ctx->counters->ssl_accept_good,

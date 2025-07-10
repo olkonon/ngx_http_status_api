@@ -61,7 +61,7 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
     "}"
 
 #define NGX_HTTP_STATUS_API_SERVER_ZONE_JSON    \
-    "\"%V\":{"                                  \
+    "\"%s\":{"                                  \
         "\"ssl\":{"                             \
             "\"handshakes\":%ui,"                 \
             "\"session_reuses\":%ui,"           \
