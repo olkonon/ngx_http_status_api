@@ -259,38 +259,56 @@ static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
     ngx_buf_t                           *b;
     ngx_chain_t                         out;
     ngx_int_t                           rc;
-    int                                 reload_timestamp = 0;
-    int                                 start_timestamp = 0;
-    ngx_http_status_api_srv_conf_t      *self_main_cf;
+    int                                 reload_timestamp = -1;
+    int                                 start_timestamp = -1;
+
+
+    ngx_http_core_srv_conf_t            **servers_conf_list;
+    ngx_uint_t                          servers_num = 0;
+    ngx_uint_t                          i;
+    ngx_http_status_api_srv_conf_t      *server_conf;
+    ngx_http_core_main_conf_t 			*core_main_conf;
     ngx_http_status_api_shm_ctx         *ctx;
+
     struct timeval   tv;
 
     //Get data to response
     ngx_gettimeofday(&tv);
 
-    self_main_cf = ngx_http_get_module_main_conf(r, ngx_http_status_api_module);
-    if (self_main_cf == NULL || self_main_cf->shm_zone==NULL) {
-        http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx] Get default SHM error, pointer is NULL");
+    //Get servers status_zone stat
+    // get core main conf
+    core_main_conf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    if (core_main_conf == NULL) {
+        http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx] Get main conf error, pointer is NULL");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
-    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx] Get default SHM success");
+    // get all servers in current worker
+    servers_conf_list = core_main_conf->servers.elts;
+    servers_num = core_main_conf->servers.nelts;
 
-    ctx = self_main_cf->shm_zone->data;
+    for (i = 0; i < servers_num ; i++) {
+       	server_conf = servers_conf_list[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
+        if (server_conf && server_conf->shm_zone && server_conf->shm_zone->data) {
+            ctx = server_conf->shm_zone->data;
 
-    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex");
-    ngx_shmtx_lock(&ctx->shpool->mutex);
-    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex success");
+            dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex");
+            ngx_shmtx_lock(&ctx->shpool->mutex);
+            dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try lock shm mutex success");
 
-    reload_timestamp = ctx->counters->load_config_timestamp;
-    start_timestamp = ctx->counters->nginx_load_timestamp;
+            reload_timestamp = ctx->counters->load_config_timestamp;
+            start_timestamp = ctx->counters->nginx_load_timestamp;
 
-    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex");
-    ngx_shmtx_unlock(&ctx->shpool->mutex);
-    dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex success");
+            dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex");
+            ngx_shmtx_unlock(&ctx->shpool->mutex);
+            dbg_http_status_api_log_info(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx][default] Try unlock shm mutex success");
+            break;
+        }
+    }
 
     // Response generate
-    b = ngx_create_temp_buf(r->pool, 65535);
+    b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_NGINX_INFO_JSON_BUFFER_SIZE);
     if (b == NULL) {
+        http_status_api_log_error(r->connection->log,"[http-status-api][ngx_http_status_api_handler_nginx] Get buffer error, pointer is NULL");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -329,7 +347,7 @@ static ngx_int_t ngx_http_status_api_handler_connections (ngx_http_request_t *r)
     ngx_int_t                           rc;
     ngx_atomic_int_t                    conn_accepted,conn_dropped,conn_handled,conn_active,conn_idle,conn_reading,conn_writing;
 
-    b = ngx_create_temp_buf(r->pool, 8192);
+    b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_CONNECTION_JSON_BUFFER_SIZE);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -373,7 +391,7 @@ static ngx_int_t ngx_http_status_api_handler_requests (ngx_http_request_t *r) {
     ngx_int_t                           rc;
     ngx_atomic_int_t                    requests,conn_reading,conn_writing;
 
-    b = ngx_create_temp_buf(r->pool, 8192);
+    b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_REQUESTS_JSON_BUFFER_SIZE);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -437,7 +455,7 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
     for (i = 0; i < servers_num ; i++) {
        	server_conf = servers_conf_list[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
 
-        if (server_conf !=NULL && server_conf->shm_zone != NULL && server_conf->shm_zone->data!=NULL) {
+        if (server_conf && server_conf->shm_zone && server_conf->shm_zone->data) {
             ctx = server_conf->shm_zone->data;
 
             dbg_http_status_api_log_info(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl][%i] Try lock mutex for SHM.",i);
@@ -458,7 +476,7 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
 
 
     // Generate response
-    b = ngx_create_temp_buf(r->pool, 8192);
+    b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_SSL_JSON_BUFFER_SIZE);
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -491,7 +509,7 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
 static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r) {
     ngx_http_core_srv_conf_t            **servers_conf_list;
     ngx_uint_t                          servers_num = 0;
-    ngx_uint_t                          i;
+    ngx_uint_t                          i,zone_counter;
     ngx_http_status_api_srv_conf_t      *server_conf;
     ngx_http_core_main_conf_t 			*core_main_conf;
     ngx_http_status_api_shm_ctx         *ctx;
@@ -500,8 +518,14 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
     ngx_chain_t                         out;
     ngx_int_t                           rc;
 
+    // get core main conf
+    core_main_conf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
+    // get all servers in current worker
+    servers_conf_list = core_main_conf->servers.elts;
+    servers_num = core_main_conf->servers.nelts;
+
     //Generate response
-    b = ngx_create_temp_buf(r->pool, 1024*(servers_num+1));
+    b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_SERVER_ZONE_JSON_BUFFER_SIZE*(servers_num+1));
     if (b == NULL) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
@@ -512,12 +536,8 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
     b->last = ngx_sprintf(b->last, "{");
 
 
-    // get core main conf
-    core_main_conf = ngx_http_get_module_main_conf(r, ngx_http_core_module);
-    // get all servers in current worker
-    servers_conf_list = core_main_conf->servers.elts;
-    servers_num = core_main_conf->servers.nelts;
 
+    zone_counter = 0;
     for (i = 0; i < servers_num; i++) {
         // this module config
         server_conf = servers_conf_list[i]->ctx->srv_conf[ngx_http_status_api_module.ctx_index];
@@ -528,7 +548,7 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
 
         if (ctx == NULL) { continue; }
 
-        if (i > 0) {
+        if (zone_counter > 0) {
             b->last = ngx_sprintf(b->last, ",");
         }
 
@@ -556,6 +576,7 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
         dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Try unlock mutex for SHM.",i);
         ngx_shmtx_unlock(&ctx->shpool->mutex);//Mutex
         dbg_http_status_api_log_info(r->connection->log, "[http-status-api][api_handler_server_zones][%i] Mutex unlock success.",i);
+        zone_counter ++;
     }
     b->last = ngx_sprintf(b->last, "}");
     // response finalized

@@ -28,16 +28,18 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
          "]"
 #endif
 
+#define NGX_HTTP_STATUS_API_NGINX_INFO_JSON_BUFFER_SIZE 1024
 #define NGX_HTTP_STATUS_API_NGINX_INFO_JSON \
     "{\"version\": \"%s\","                 \
         "\"build\": \"%s\","                \
         "\"hostname\": \"%V\","             \
         "\"timestmap\": %ui,"               \
         "\"start_timestamp\": %ui,"         \
-        "\"reload_timestamp\": %ui,"   NGX_HTTP_STATUS_API_SERVER_ZONE_JSON     \
+        "\"reload_timestamp\": %ui"        \
     "}"
 
 #ifdef NGX_STAT_STUB
+    #define NGX_HTTP_STATUS_API_CONNECTION_JSON_BUFFER_SIZE 512
     #define NGX_HTTP_STATUS_API_CONNECTION_JSON     \
         "{"                                         \
             "\"accepted\": %ui,"                    \
@@ -45,6 +47,7 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
             "\"active\": %ui,"                      \
             "\"idle\": %ui"                         \
         "}"
+    #define NGX_HTTP_STATUS_API_REQUESTS_JSON_BUFFER_SIZE 256
     #define NGX_HTTP_STATUS_API_REQUESTS_JSON   \
         "{"                                     \
             "\"total\": %uA,"                   \
@@ -52,6 +55,7 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
         "}"
 #endif
 
+#define NGX_HTTP_STATUS_API_SSL_JSON_BUFFER_SIZE 512
 #define NGX_HTTP_STATUS_API_SSL_JSON    \
     "{"                                 \
         "\"handshakes\":%ui,"           \
@@ -59,7 +63,7 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r);
         "\"handshakes_failed\":%ui,"    \
         "\"handshake_timeout\":%ui"     \
     "}"
-
+#define NGX_HTTP_STATUS_API_SERVER_ZONE_JSON_BUFFER_SIZE 1024
 #define NGX_HTTP_STATUS_API_SERVER_ZONE_JSON    \
     "\"%s\":{"                                  \
         "\"ssl\":{"                             \
