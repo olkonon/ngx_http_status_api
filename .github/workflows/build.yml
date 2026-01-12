@@ -2,12 +2,36 @@ name: Build
 run-name: ${{ github.actor }}
 on: [push]
 jobs:
-  build:
+  build_1_27_5:
+    name: Test build with nginx 1.27.5
     runs-on: ubuntu-latest
+    env:
+      NGX_VER: '1.27.5'
     steps:
       - uses: actions/checkout@v2
       - name: Install environment
         run: 'sudo apt install -y libpcre2-dev zlib1g-dev wget'
-      - name: Build
+      - name: Build with nginx ${{ NGX_VER }}
         run: './build.sh'
-      - run: echo "This job's status is ${{ job.status }}."
+  build_1_28_1:
+    name: Test build with nginx 1.28.1
+    runs-on: ubuntu-latest
+    env:
+      NGX_VER: '1.28.1'
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install environment
+        run: 'sudo apt install -y libpcre2-dev zlib1g-dev wget'
+      - name: Build with nginx ${{ NGX_VER }}
+        run: './build.sh'
+  build_1_29_4:
+    name: Test build with nginx 1.29.4
+    runs-on: ubuntu-latest
+    env:
+      NGX_VER: '1.29.4'
+    steps:
+      - uses: actions/checkout@v2
+      - name: Install environment
+        run: 'sudo apt install -y libpcre2-dev zlib1g-dev wget'
+      - name: Build with nginx ${{ NGX_VER }}
+        run: './build.sh'
