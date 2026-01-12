@@ -70,7 +70,7 @@ http_status_api_display_handler_default(ngx_http_request_t *r)
     ngx_str_t                                          type;
     ngx_int_t                                          size, rc;
     ngx_buf_t                                         *b;
-    ngx_chain_t                                        out;
+    ngx_chain_t                                       *out;
     ngx_slab_pool_t                                   *shpool;
     ngx_http_stream_server_traffic_status_ctx_t       *ctx;
     ngx_http_stream_server_traffic_status_loc_conf_t  *stscf;
@@ -107,6 +107,11 @@ http_status_api_display_handler_default(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][http_status_api_display_handler_default] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
 
     b = ngx_create_temp_buf(r->pool, size);
     if (b == NULL) {
@@ -147,7 +152,7 @@ http_status_api_display_set(ngx_http_request_t *r,
     u_char *buf)
 {
     u_char                                            *o, *s;
-    
+
     ngx_http_stream_server_traffic_status_loc_conf_t  *stscf;
 
     stscf = ngx_http_get_module_loc_conf(r, ngx_http_stream_server_traffic_status_module);

@@ -33,7 +33,7 @@ ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r
     ngx_str_t                                   type;
     ngx_int_t                                   size, rc;
     ngx_buf_t                                   *b;
-    ngx_chain_t                                 out;
+    ngx_chain_t                                 *out;
     ngx_slab_pool_t                             *shpool;
     ngx_http_vhost_traffic_status_ctx_t         *ctx;
     ngx_http_vhost_traffic_status_loc_conf_t    *vtscf;
@@ -69,6 +69,12 @@ ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
                       "[http-status-api]  display_handler_default::display_get_size() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
+
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_traffic_status_display_handler_default] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
     }
 
     b = ngx_create_temp_buf(r->pool, size);

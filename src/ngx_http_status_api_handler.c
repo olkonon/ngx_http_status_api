@@ -64,7 +64,7 @@ ngx_int_t ngx_http_status_api_handler(ngx_http_request_t *r) {
 //+ Base URLs handler
 static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_t *path) {
     ngx_buf_t       *b;
-    ngx_chain_t     out;
+    ngx_chain_t     *out;
     ngx_int_t       rc;
     ngx_uint_t      size;
     //discard body
@@ -79,12 +79,18 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
     if ( path->len ==0 ) {
         return NGX_HTTP_NOT_FOUND;
     }
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_root] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
     // handle /api
     if ((ngx_strncmp(path->data, "/",path->len) == 0) || (ngx_strncmp(path->data, "",path->len) == 0)) {
         size = sizeof(NGX_HTTP_STATUS_API_VERSIONS_JSON)+1;
         b = ngx_create_temp_buf(r->pool, size);
 
         if (b == NULL) {
+            http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_root] Can't allocate temp buffer [b] pointer is null");
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -102,13 +108,14 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
         if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
             return rc;
         }
-        return ngx_http_output_filter(r, &out);
+        return ngx_http_output_filter(r, out);
     }
 
     if ((ngx_strncmp(path->data, "/v1",path->len) == 0) || (ngx_strncmp(path->data, "/v1/",path->len) == 0)) {
         size = sizeof(NGX_HTTP_STATUS_API_DIVISION_JSON)+1;
         b = ngx_create_temp_buf(r->pool, size);
         if (b == NULL) {
+            http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_root] Can't allocate temp buffer [b] pointer is null");
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -126,7 +133,7 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
         if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
             return rc;
         }
-        return ngx_http_output_filter(r, &out);
+        return ngx_http_output_filter(r, out);
     }
 
     if ((ngx_strncmp(path->data, "/v1/http",path->len) == 0) || (ngx_strncmp(path->data, "/v1/http/",path->len) == 0)) {
@@ -144,6 +151,7 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
                     "]")+1;
         b = ngx_create_temp_buf(r->pool, size);
         if (b == NULL) {
+            http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_root] Can't allocate temp buffer [b] pointer is null");
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -172,7 +180,7 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
         if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
             return rc;
         }
-        return ngx_http_output_filter(r, &out);
+        return ngx_http_output_filter(r, out);
     }
 
 
@@ -186,7 +194,9 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
                     #endif
                     "]")+1;
         b = ngx_create_temp_buf(r->pool, size);
+
         if (b == NULL) {
+            http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_root] Can't allocate temp buffer [b] pointer is null");
             return NGX_HTTP_INTERNAL_SERVER_ERROR;
         }
 
@@ -211,7 +221,7 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
         if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
             return rc;
         }
-        return ngx_http_output_filter(r, &out);
+        return ngx_http_output_filter(r, out);
     }
 
 
@@ -257,7 +267,7 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
 //+ Handle nginx statistic
 static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
     ngx_buf_t                           *b;
-    ngx_chain_t                         out;
+    ngx_chain_t                         *out;
     ngx_int_t                           rc;
     int                                 reload_timestamp = -1;
     int                                 start_timestamp = -1;
@@ -305,6 +315,12 @@ static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
         }
     }
 
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_nginx] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
+
     // Response generate
     b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_NGINX_INFO_JSON_BUFFER_SIZE);
     if (b == NULL) {
@@ -336,19 +352,27 @@ static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 
 #ifdef NGX_STAT_STUB
 //+ Handle nginx connections statistic
 static ngx_int_t ngx_http_status_api_handler_connections (ngx_http_request_t *r) {
     ngx_buf_t                           *b;
-    ngx_chain_t                         out;
+    ngx_chain_t                         *out;
     ngx_int_t                           rc;
     ngx_atomic_int_t                    conn_accepted,conn_dropped,conn_handled,conn_active,conn_idle,conn_reading,conn_writing;
 
+
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_connections] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
+
     b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_CONNECTION_JSON_BUFFER_SIZE);
     if (b == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_connections] Can't allocate temp buffer [b] pointer is null");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -381,18 +405,26 @@ static ngx_int_t ngx_http_status_api_handler_connections (ngx_http_request_t *r)
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 
 //+ Handle nginx requests statistic
 static ngx_int_t ngx_http_status_api_handler_requests (ngx_http_request_t *r) {
     ngx_buf_t                           *b;
-    ngx_chain_t                         out;
+    ngx_chain_t                         *out;
     ngx_int_t                           rc;
     ngx_atomic_int_t                    requests,conn_reading,conn_writing;
 
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_int_t ngx_http_status_api_handler_requests] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
+
+
     b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_REQUESTS_JSON_BUFFER_SIZE);
     if (b == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_int_t ngx_http_status_api_handler_requests] Can't allocate temp buffer [b] pointer is null");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -419,14 +451,14 @@ static ngx_int_t ngx_http_status_api_handler_requests (ngx_http_request_t *r) {
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 #endif
 
 //+ Handle SSL statistic
 static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
     ngx_buf_t                           *b;
-    ngx_chain_t                         out;
+    ngx_chain_t                         *out;
     ngx_int_t                           rc;
 
     ngx_uint_t                          handshakes = 0;
@@ -476,8 +508,15 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
 
 
     // Generate response
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl]] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
+
     b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_SSL_JSON_BUFFER_SIZE);
     if (b == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_ssl]] Can't allocate temp buffer [b] pointer is null");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -502,7 +541,7 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 
 //+ Handle server_zones statistic
@@ -515,7 +554,7 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
     ngx_http_status_api_shm_ctx         *ctx;
 
     ngx_buf_t                           *b;
-    ngx_chain_t                         out;
+    ngx_chain_t                         *out;
     ngx_int_t                           rc;
 
     // get core main conf
@@ -525,8 +564,15 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
     servers_num = core_main_conf->servers.nelts;
 
     //Generate response
+    out = ngx_alloc_chain_link(r->pool)
+    if (out == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_server_zones] Can't allocate chain link [out] pointer is null");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR
+    }
+
     b = ngx_create_temp_buf(r->pool, NGX_HTTP_STATUS_API_SERVER_ZONE_JSON_BUFFER_SIZE*(servers_num+1));
     if (b == NULL) {
+        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_handler_server_zones] Can't allocate temporary buffer [b] pointer is null");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -592,7 +638,7 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 
 
