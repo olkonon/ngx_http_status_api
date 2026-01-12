@@ -96,8 +96,8 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
 
         b->last = ngx_sprintf(b->last, NGX_HTTP_STATUS_API_VERSIONS_JSON);
 
-        out.buf = b;
-        out.next = NULL;
+        out->buf = b;
+        out->next = NULL;
         r->headers_out.status = NGX_HTTP_OK;
         r->headers_out.content_length_n = b->last - b->pos;
 
@@ -121,8 +121,8 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
 
         b->last = ngx_sprintf(b->last,NGX_HTTP_STATUS_API_DIVISION_JSON);
 
-        out.buf = b;
-        out.next = NULL;
+        out->buf = b;
+        out->next = NULL;
         r->headers_out.status = NGX_HTTP_OK;
         r->headers_out.content_length_n = b->last - b->pos;
 
@@ -168,8 +168,8 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
                     "\"server_zones\""
                     "]");
 
-        out.buf = b;
-        out.next = NULL;
+        out->buf = b;
+        out->next = NULL;
         r->headers_out.status = NGX_HTTP_OK;
         r->headers_out.content_length_n = b->last - b->pos;
 
@@ -209,8 +209,8 @@ static ngx_int_t ngx_http_status_api_handler_root(ngx_http_request_t *r,ngx_str_
                     #endif
                     "]");
 
-        out.buf = b;
-        out.next = NULL;
+        out->buf = b;
+        out->next = NULL;
         r->headers_out.status = NGX_HTTP_OK;
         r->headers_out.content_length_n = b->last - b->pos;
 
@@ -328,8 +328,8 @@ static ngx_int_t ngx_http_status_api_handler_nginx(ngx_http_request_t *r) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     b->last = ngx_sprintf(b->last,NGX_HTTP_STATUS_API_NGINX_INFO_JSON,
         NGINX_VERSION,
@@ -376,8 +376,8 @@ static ngx_int_t ngx_http_status_api_handler_connections (ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     conn_accepted = *ngx_stat_accepted;
     conn_handled = *ngx_stat_handled;
@@ -428,8 +428,8 @@ static ngx_int_t ngx_http_status_api_handler_requests (ngx_http_request_t *r) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     conn_reading = *ngx_stat_reading;
     conn_writing = *ngx_stat_writing;
@@ -520,8 +520,8 @@ static ngx_int_t ngx_http_status_api_handler_ssl(ngx_http_request_t *r) {
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     b->last = ngx_sprintf(b->last, NGX_HTTP_STATUS_API_SSL_JSON,
             handshakes,
@@ -576,8 +576,8 @@ static ngx_int_t ngx_http_status_api_handler_server_zones(ngx_http_request_t *r)
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     b->last = ngx_sprintf(b->last, "{");
 

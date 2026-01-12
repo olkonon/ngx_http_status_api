@@ -100,8 +100,8 @@ ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r
     b->last_buf = (r == r->main) ? 1 : 0; /* if subrequest 0 else 1 */
     b->last_in_chain = 1;
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     rc = ngx_http_send_header(r);
     if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
