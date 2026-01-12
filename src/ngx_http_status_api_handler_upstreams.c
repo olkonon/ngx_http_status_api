@@ -67,20 +67,21 @@ ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r
     size = ngx_http_status_api_traffic_status_display_get_size(r);
     if (size == NGX_ERROR) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "[http-status-api]  display_handler_default::display_get_size() failed");
+            "[http-status-api]  display_handler_default::display_get_size() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     out = ngx_alloc_chain_link(r->pool);
     if (out == NULL) {
-        http_status_api_log_error(r->connection->log, "[http-status-api][ngx_http_status_api_traffic_status_display_handler_default] Can't allocate chain link [out] pointer is null");
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+            "[http-status-api]  display_handler_default:: ngx_alloc_chain_link() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     b = ngx_create_temp_buf(r->pool, size);
     if (b == NULL) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "[http-status-api]  display_handler_default::ngx_create_temp_buf() failed");
+            "[http-status-api]  display_handler_default::ngx_create_temp_buf() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
@@ -108,7 +109,7 @@ ngx_http_status_api_traffic_status_display_handler_default(ngx_http_request_t *r
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 
 static u_char *ngx_http_status_api_traffic_status_display_set(ngx_http_request_t *r,u_char *buf)

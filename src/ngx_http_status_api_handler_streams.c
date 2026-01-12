@@ -103,13 +103,14 @@ http_status_api_display_handler_default(ngx_http_request_t *r)
     size = ngx_http_stream_server_traffic_status_display_get_size(r);
     if (size == NGX_ERROR) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "display_handler_default::display_get_size() failed");
+            "display_handler_default::display_get_size() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
     out = ngx_alloc_chain_link(r->pool);
     if (out == NULL) {
-        http_status_api_log_error(r->connection->log, "[http-status-api][http_status_api_display_handler_default] Can't allocate chain link [out] pointer is null");
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+            "display_handler_default::ngx_alloc_chain_link() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
