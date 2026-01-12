@@ -70,7 +70,7 @@ http_status_api_display_handler_default(ngx_http_request_t *r)
     ngx_str_t                                          type;
     ngx_int_t                                          size, rc;
     ngx_buf_t                                         *b;
-    ngx_chain_t                                        out;
+    ngx_chain_t                                       *out;
     ngx_slab_pool_t                                   *shpool;
     ngx_http_stream_server_traffic_status_ctx_t       *ctx;
     ngx_http_stream_server_traffic_status_loc_conf_t  *stscf;
@@ -103,10 +103,16 @@ http_status_api_display_handler_default(ngx_http_request_t *r)
     size = ngx_http_stream_server_traffic_status_display_get_size(r);
     if (size == NGX_ERROR) {
         ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
-                      "display_handler_default::display_get_size() failed");
+            "display_handler_default::display_get_size() failed");
         return NGX_HTTP_INTERNAL_SERVER_ERROR;
     }
 
+    out = ngx_alloc_chain_link(r->pool);
+    if (out == NULL) {
+        ngx_log_error(NGX_LOG_ERR, r->connection->log, 0,
+            "display_handler_default::ngx_alloc_chain_link() failed");
+        return NGX_HTTP_INTERNAL_SERVER_ERROR;
+    }
 
     b = ngx_create_temp_buf(r->pool, size);
     if (b == NULL) {
@@ -129,15 +135,15 @@ http_status_api_display_handler_default(ngx_http_request_t *r)
     b->last_buf = (r == r->main) ? 1 : 0; /* if subrequest 0 else 1 */
     b->last_in_chain = 1;
 
-    out.buf = b;
-    out.next = NULL;
+    out->buf = b;
+    out->next = NULL;
 
     rc = ngx_http_send_header(r);
     if (rc == NGX_ERROR || rc > NGX_OK || r->header_only) {
         return rc;
     }
 
-    return ngx_http_output_filter(r, &out);
+    return ngx_http_output_filter(r, out);
 }
 
 
@@ -147,7 +153,7 @@ http_status_api_display_set(ngx_http_request_t *r,
     u_char *buf)
 {
     u_char                                            *o, *s;
-    
+
     ngx_http_stream_server_traffic_status_loc_conf_t  *stscf;
 
     stscf = ngx_http_get_module_loc_conf(r, ngx_http_stream_server_traffic_status_module);
