@@ -12,7 +12,10 @@ ngx_int_t ngx_http_status_api_handler_upstreams_handler(ngx_http_request_t *r);
 #define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_ARRAY_S     "\"%V\":["
 #define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_ARRAY_E     "]"
 #define NGX_HTTP_VHOST_TRAFFIC_STATUS_JSON_FMT_NEXT        ","
-
+/* length of type prefix "UG" + separator 0x1f */
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_UPSTREAM_PREFIX_LEN 3
+/* total key overhead: type prefix "UG" + separator 0x1f + separator 0x1f between host and peer */
+#define NGX_HTTP_VHOST_TRAFFIC_STATUS_UPSTREAM_KEY_LEN 4
 
 #define NGX_HTTP_STATUS_API_JSON_FMT_UPSTREAM "{\"server\":\"%V\","            \
     "\"requestCounter\":%uA,"                                                  \
