@@ -118,11 +118,11 @@ static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
     ngx_http_status_api_shm_ctx         *ctx;
 
 
-	http_status_api_conf_log_info(cf, "[http-status-api][get_or_create_shm_zone][%V] Start init zone.", name);
+	dbg_http_status_api_conf_log_info(cf, "[http-status-api][get_or_create_shm_zone][%V] Start init zone.", name);
 
     ctx = ngx_pcalloc(cf->pool, sizeof(ngx_http_status_api_shm_ctx));
     if (ctx == NULL) {
-        dbg_http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Error creating ngx_http_status_api_shm_ctx", name);
+        http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Error creating ngx_http_status_api_shm_ctx", name);
         return NULL;
     }
 
@@ -135,7 +135,7 @@ static ngx_shm_zone_t* get_or_create_shm_zone(ngx_conf_t *cf, ngx_str_t *name) {
     //Init real name of shm
     shm_name = ngx_pcalloc(cf->pool,sizeof(ngx_str_t));
     if (shm_name == NULL) {
-        dbg_http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Can't allocate mem for zone creating.", name);
+        http_status_api_conf_log_error(cf,"[http-status-api][get_or_create_shm_zone][%V] Can't allocate mem for zone creating.", name);
         return NULL;
     }
 
