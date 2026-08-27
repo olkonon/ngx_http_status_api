@@ -39,6 +39,7 @@ cd $DIR/buildnginx
 
 ./configure --with-cc-opt='-g -O2 -fstack-protector-strong -Wformat -Werror=format-security' \
 --build="nginx-${NGINX_VERSION}" \
+--with-debug \
 --with-pcre \
 --with-stream \
 --with-http_ssl_module \

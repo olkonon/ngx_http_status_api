@@ -1,37 +1,21 @@
 name: Build
-run-name: ${{ github.actor }}
 on: [push]
 jobs:
-  build_1_27_5:
-    name: Test build with nginx 1.27.5
+  build:
+    strategy:
+      matrix:
+        nginx_version: [ 1.30.4 ]
+        script_name: [ '','-debug']
     runs-on: ubuntu-latest
-    env:
-      NGX_VER: '1.27.5'
+    name: "Test build nginx${{matrix.script_name}} ${{ matrix.nginx_version }}"
     steps:
       - uses: actions/checkout@v2
       - name: Install environment
         run: 'sudo apt install -y libpcre2-dev zlib1g-dev wget'
-      - name: Build with nginx 1.27.5
-        run: './build.sh'
-  build_1_28_1:
-    name: Test build with nginx 1.28.1
-    runs-on: ubuntu-latest
-    env:
-      NGX_VER: '1.28.1'
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install environment
-        run: 'sudo apt install -y libpcre2-dev zlib1g-dev wget'
-      - name: Build with nginx 1.28.1
-        run: './build.sh'
-  build_1_29_4:
-    name: Test build with nginx 1.29.4
-    runs-on: ubuntu-latest
-    env:
-      NGX_VER: '1.29.4'
-    steps:
-      - uses: actions/checkout@v2
-      - name: Install environment
-        run: 'sudo apt install -y libpcre2-dev zlib1g-dev wget'
-      - name: Build with nginx 1.29.4
-        run: './build.sh'
+      - name: Build nginx${{matrix.script_name}} ${{ matrix.nginx_version }}
+        env:
+            NGINX_VERSION: "${{ matrix.nginx_version }}"
+            VTS_MODULE_VERSION: "0.0.2"
+            STS_MODULE_VERSION: "0.0.3"
+            DYNAMIC_HEALTHCHECK_MODULE_VERSION: "0.0.5"
+        run: './build${{matrix.script_name}}.sh'
